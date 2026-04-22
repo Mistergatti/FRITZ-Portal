@@ -15,6 +15,39 @@ const _ts = () => new Date().toLocaleTimeString('de-DE', { hour12: false, hour: 
 console.log   = (...args) => _log(`[${_ts()}]`, ...args);
 console.error = (...args) => _error(`[${_ts()}]`, ...args);
 
+// ── Debug-Logging ──
+let debugLogging = process.env.DEBUG_LOGGING === 'true';
+function debugLog(...args) {
+  if (debugLogging) console.log('[DEBUG]', ...args);
+}
+
+// ── Rate-Limiter: max. 3 gleichzeitige data.lua Anfragen + 300ms Mindestabstand ──
+// Verhindert Session-Spam auf der Fritz!Box und stabilisiert UI + SmartHome (BUG-01/02)
+{
+  const _origFetch = globalThis.fetch;
+  let _inflight = 0;
+  let _lastCallMs = 0;
+  globalThis.fetch = async function patchedFetch(url, opts) {
+    const urlStr = typeof url === 'string' ? url : (url?.href ?? String(url ?? ''));
+    if (urlStr.includes('/data.lua')) {
+      while (_inflight >= 3) await new Promise(r => setTimeout(r, 60));
+      const gap = 300 - (Date.now() - _lastCallMs);
+      if (gap > 0) await new Promise(r => setTimeout(r, gap));
+      _lastCallMs = Date.now();
+      _inflight++;
+      debugLog(`data.lua \u2191 (${_inflight} aktiv)`);
+      try {
+        return await _origFetch(url, opts);
+      } finally {
+        _inflight--;
+        debugLog(`data.lua \u2193 (${_inflight} aktiv)`);
+      }
+    }
+    if (debugLogging && urlStr.includes(':49000')) debugLog(`SOAP: ${urlStr.split('?')[0]}`);
+    return _origFetch(url, opts);
+  };
+}
+
 // ── HA Add-on: Zugangsdaten aus /data/options.json lesen (überschreibt Env-Vars nicht) ──
 try {
   if (existsSync('/data/options.json')) {
@@ -25,9 +58,24 @@ try {
     if (opts.ha_sensors                  !== undefined && !process.env.HA_SENSORS)                  process.env.HA_SENSORS                  = String(opts.ha_sensors);
     if (opts.ha_sensors_interval          !== undefined && !process.env.HA_SENSORS_INTERVAL)          process.env.HA_SENSORS_INTERVAL          = String(opts.ha_sensors_interval);
     if (opts.ha_sensors_traffic_interval  !== undefined && !process.env.HA_SENSORS_TRAFFIC_INTERVAL)  process.env.HA_SENSORS_TRAFFIC_INTERVAL  = String(opts.ha_sensors_traffic_interval);
-    console.log('HA Add-on: Fritz!Box-Optionen geladen (' + opts.fritzbox_host + ')');
+    if (opts.debug_logging !== undefined) debugLogging = !!opts.debug_logging;
+    console.log('HA Add-on: Fritz!Box-Optionen geladen (' + opts.fritzbox_host + ')' + (debugLogging ? ' [Debug-Logging aktiv]' : ''));
   }
 } catch {}
+
+// ── Startup-Warnung: Fritz!Box-Hostname prüfen (BUG-03/10) ──
+// Gibt im Protokoll einen klaren Hinweis wenn fritz.box nicht auflösbar ist
+(async () => {
+  const h = process.env.FRITZBOX_HOST;
+  if (!h || /^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return; // IP-Adresse: OK, kein DNS-Check
+  try {
+    const { lookup } = await import('node:dns/promises');
+    await lookup(h);
+    debugLog(`Hostname "${h}" erfolgreich aufgelöst`);
+  } catch {
+    console.log(`\u26a0\uFE0F  Hostname "${h}" konnte nicht aufgelöst werden! Bitte IP-Adresse (z.\u00a0B. 192.168.178.1) statt Hostname in der Add-on-Konfiguration verwenden.`);
+  }
+})();
 
 const app = express();
 app.use(express.json());
@@ -96,6 +144,9 @@ async function getCachedWebSid(session) {
 // ── Letzter bekannter Wert für HA-Sensoren (verhindert Null-Sprünge bei abgelaufenem Cache) ──
 const lastKnownFast    = { cpu: 0, ram: 0, cpu_temp: 0, online: 0, free_ips: 0 };
 const lastKnownTraffic = {};
+
+// MAC → Unix-Timestamp (Sek.), wann Gerät zuletzt als aktiv gesehen wurde
+const lastSeenMap = new Map();
 
 // ── Traffic history für Dashboard-Chart (server-seitig, alle 10 Sekunden) ──
 const trafficHistory = { down: [], up: [] };
@@ -168,7 +219,7 @@ setInterval(async () => {
     } catch {}
     try { await collectEcoHistory(session); } catch {}
   }
-}, 10000);
+}, 15000);
 
 function getCached(key, ttl = CACHE_TTL) {
   const entry = cache.get(key);
@@ -386,12 +437,19 @@ async function getHostsViaSoap(host, username, password, controlUrls) {
     for (const r of results) {
       if (r.status === 'fulfilled') {
         const entry = r.value;
+        const mac = (entry.NewMACAddress || '').replace(/-/g, ':').toLowerCase();
+        const active = entry.NewActive === '1' || entry.NewActive === 'true';
+        if (active && mac) lastSeenMap.set(mac, Math.floor(Date.now() / 1000));
+        const soapTs = entry['NewX_AVM-DE_LastActivity'] || '';
+        const lastActivity = soapTs || (lastSeenMap.has(mac) ? String(lastSeenMap.get(mac)) : '');
         hosts.push({
-          mac: (entry.NewMACAddress || '').replace(/-/g, ':').toLowerCase(),
+          mac,
           ip: entry.NewIPAddress || '',
-          active: entry.NewActive === '1' || entry.NewActive === 'true',
+          active,
           name: entry.NewHostName || entry.NewInterfaceType || '',
           interface: entry.NewInterfaceType || '',
+          addressSource: entry.NewAddressSource || '',
+          lastActivity,
         });
       }
     }
@@ -917,7 +975,7 @@ app.get('/api/fritz/network/wlan', async (req, res) => {
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
   try {
     const results = [];
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= 4; i++) {
       try {
         const svc = `urn:dslforum-org:service:WLANConfiguration:${i}`;
         const info = await soapRequest(session.host, svc, 'GetInfo', session.username, session.password, session.controlUrls);
@@ -1105,10 +1163,10 @@ app.get('/api/fritz/mesh', async (req, res) => {
   const webSid = await getCachedWebSid(session);
   if (!webSid) { console.log('Mesh: kein webSid verfügbar'); return res.json({ nodes: [], links: [] }); }
 
-  // Alle Seiten + meshlist.lua parallel abfragen (statt seriell) → max. 10s Wartezeit
+  // Alle Seiten + meshlist.lua parallel abfragen (statt seriell) → max. 5s Wartezeit
   async function tryDataLuaPage(page) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const timer = setTimeout(() => ctrl.abort(), 5000);
     try {
       const params = new URLSearchParams({ xhr: '1', sid: webSid, lang: 'de', page, xhrId: 'all' });
       const r = await fetch(`http://${session.host}/data.lua`, {
@@ -1148,7 +1206,7 @@ app.get('/api/fritz/mesh', async (req, res) => {
 
   async function tryMeshlist() {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const timer = setTimeout(() => ctrl.abort(), 5000);
     try {
       const r = await fetch(`http://${session.host}/meshlist.lua?sid=${webSid}`, { signal: ctrl.signal });
       const text = await r.text();
@@ -1168,7 +1226,7 @@ app.get('/api/fritz/mesh', async (req, res) => {
   // Alternativer Endpunkt: /net/mesh_overview.lua (manche FritzOS-Versionen)
   async function tryMeshOverview() {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const timer = setTimeout(() => ctrl.abort(), 5000);
     try {
       const r = await fetch(`http://${session.host}/net/mesh_overview.lua?sid=${webSid}`, { signal: ctrl.signal });
       const text = await r.text();
@@ -1850,21 +1908,24 @@ app.get('/api/fritz/ha-settings', (req, res) => {
     ha_sensors_traffic_interval: haTrafficIntervalSec,
     ha_available:                !!HA_TOKEN,
     mqtt_available:              mqttAvailable,
+    debug_logging:               debugLogging,
   });
 });
 
 app.post('/api/fritz/ha-settings', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   if (!sessions.get(sid)) return res.status(401).json({ error: 'Nicht eingeloggt' });
-  const { ha_sensors, ha_sensors_interval, ha_sensors_traffic_interval } = req.body;
+  const { ha_sensors, ha_sensors_interval, ha_sensors_traffic_interval, debug_logging } = req.body;
   if (ha_sensors !== undefined)                  haSensorsEnabled     = !!ha_sensors;
   if (ha_sensors_interval !== undefined)         haFastIntervalSec    = Math.max(10,  parseInt(ha_sensors_interval,         10) || 60);
   if (ha_sensors_traffic_interval !== undefined) haTrafficIntervalSec = Math.max(30,  parseInt(ha_sensors_traffic_interval, 10) || 300);
+  if (debug_logging !== undefined)               { debugLogging = !!debug_logging; console.log(`Debug-Logging ${debugLogging ? 'aktiviert' : 'deaktiviert'}`); }
   try {
     writeFileSync(SETTINGS_FILE, JSON.stringify({
       ha_sensors:                  haSensorsEnabled,
       ha_sensors_interval:         haFastIntervalSec,
       ha_sensors_traffic_interval: haTrafficIntervalSec,
+      debug_logging:               debugLogging,
     }));
   } catch (e) { console.error('Settings speichern fehlgeschlagen:', e.message); }
   // Sync to HA Add-on config (requires hassio_api: true)
@@ -1878,7 +1939,7 @@ app.post('/api/fritz/ha-settings', async (req, res) => {
       await fetch('http://supervisor/addons/self/options', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ options: { ...opts, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec } }),
+        body: JSON.stringify({ options: { ...opts, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, debug_logging: debugLogging } }),
       });
     }
   } catch {}

@@ -8,6 +8,8 @@ interface Host {
   active: boolean;
   name: string;
   interface: string;
+  addressSource?: string;
+  lastActivity?: string;
 }
 
 interface IpStats {
@@ -135,6 +137,17 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
     h.mac.toLowerCase().includes(search.toLowerCase())
   );
 
+  const formatLastActivity = (ts: string | undefined) => {
+    if (!ts) return '';
+    const n = parseInt(ts, 10);
+    if (!n) return '';
+    const diff = Math.floor((Date.now() / 1000) - n);
+    if (diff < 60) return 'gerade eben';
+    if (diff < 3600) return `vor ${Math.floor(diff / 60)} Min`;
+    if (diff < 86400) return `vor ${Math.floor(diff / 3600)} Std`;
+    return `vor ${Math.floor(diff / 86400)} Tagen`;
+  };
+
   const isWlan = (iface: string) => {
     const s = String(iface || '').toLowerCase();
     return s.includes('wlan') || s.includes('802');
@@ -149,9 +162,12 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
       case 'status':
         cmp = (a.active ? 1 : 0) - (b.active ? 1 : 0);
         break;
-      case 'ip':
-        cmp = (a.ip || '').localeCompare(b.ip || '');
+      case 'ip': {
+        const ipNum = (ip: string) =>
+          ip.split('.').reduce((acc, p) => acc * 256 + (parseInt(p, 10) || 0), 0);
+        cmp = ipNum(a.ip || '0.0.0.0') - ipNum(b.ip || '0.0.0.0');
         break;
+      }
       case 'connection':
         cmp = (isWlan(a.interface || '') ? 'wlan' : 'lan').localeCompare(isWlan(b.interface || '') ? 'wlan' : 'lan');
         break;
@@ -246,6 +262,7 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                   <th style={{ cursor: 'pointer' }} onClick={() => handleSort('ip')}>IP-Adresse{getSortIndicator('ip')}</th>
                   <th>MAC-Adresse</th>
                   <th style={{ cursor: 'pointer' }} onClick={() => handleSort('connection')}>Verbindung{getSortIndicator('connection')}</th>
+                  <th>Zuletzt online</th>
                 </tr>
               </thead>
               <tbody>
@@ -256,7 +273,29 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                       {host.active ? 'Online' : 'Offline'}
                     </td>
                     <td className="device-name">{host.name || 'Unbekannt'}</td>
-                    <td>{host.ip}</td>
+                    <td>
+                      {host.ip ? (
+                        <>
+                          <a
+                            href={`http://${host.ip}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            style={{ color: 'var(--text-primary)', textDecoration: 'none' }}
+                            title={`${host.ip} im Browser öffnen`}
+                          >
+                            {host.ip}
+                          </a>
+                          {host.addressSource === 'Static' && (
+                            <span title="Feste IP-Adresse" style={{
+                              marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '1px 5px',
+                              borderRadius: 4, background: '#3b82f620', color: '#3b82f6',
+                              border: '1px solid #3b82f640', verticalAlign: 'middle',
+                            }}>FEST</span>
+                          )}
+                        </>
+                      ) : '—'}
+                    </td>
                     <td className="device-mac">{host.mac}</td>
                     <td>
                       {isWlan(host.interface) ? (
@@ -275,11 +314,16 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                         </span>
                       )}
                     </td>
+                    <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                      {host.active
+                        ? (formatLastActivity(host.lastActivity) || '—')
+                        : (formatLastActivity(host.lastActivity) || 'Unbekannt')}
+                    </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 32 }}>
+                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 32 }}>
                       Keine Ger{"\u00e4"}te gefunden
                     </td>
                   </tr>

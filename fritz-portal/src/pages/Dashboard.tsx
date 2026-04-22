@@ -180,20 +180,30 @@ export default function Dashboard({ sid }: DashboardProps) {
           setTraffic(trafficData);
 
           const toMbps = (b: number) => parseFloat(((b * 8) / (1024 * 1024)).toFixed(2));
-          const dsHist: number[] = trafficData.dsHistory || [];
-          const usHist: number[] = trafficData.usHistory || [];
-          const POINTS = 60;
-          const now = Date.now();
-          const initial: NetworkData[] = Array.from({ length: POINTS }, (_, i) => {
-            const offset = POINTS - i;
-            const idx = dsHist.length - offset;
-            return {
-              time: new Date(now - offset * 5000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              download: idx >= 0 ? toMbps(dsHist[idx] || 0) : 0,
-              upload: idx >= 0 ? toMbps(usHist[idx] || 0) : 0,
-            };
-          });
-          setNetworkData(initial);
+          const MAX_POINTS = 60; // 15 Minuten bei 15s Intervall
+
+          // Bestehenden Graph-Verlauf wiederverwenden (Navigation hin/her);
+          // bei erster Ladung aus dsHistory der Fritz!Box initialisieren
+          const existingHistory = (window as any).__networkHistory as NetworkData[] | undefined;
+          if (existingHistory && existingHistory.length > 0) {
+            setNetworkData(existingHistory);
+          } else {
+            const dsHist: number[] = trafficData.dsHistory || [];
+            const usHist: number[] = trafficData.usHistory || [];
+            const now = Date.now();
+            // dsHistory liefert ~5s-Intervalle → 3er-Schritt für 15s-Ausrichtung
+            const initial: NetworkData[] = Array.from({ length: MAX_POINTS }, (_, i) => {
+              const offset = MAX_POINTS - i;
+              const idx = Math.round(dsHist.length - offset * 3);
+              return {
+                time: new Date(now - offset * 15000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+                download: idx >= 0 ? toMbps(dsHist[idx] || 0) : 0,
+                upload: idx >= 0 ? toMbps(usHist[idx] || 0) : 0,
+              };
+            });
+            (window as any).__networkHistory = initial;
+            setNetworkData(initial);
+          }
 
           // ── 4. Live-Interval erst starten wenn Basisdaten geladen ───────────
           if (intervalRef.current) clearInterval(intervalRef.current);
@@ -206,13 +216,18 @@ export default function Dashboard({ sid }: DashboardProps) {
               setEcoStats(s);
               setTraffic(t);
               const toMbps2 = (b: number) => parseFloat(((b * 8) / (1024 * 1024)).toFixed(2));
-              setNetworkData(prev => [...prev.slice(1), {
-                time: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              const newPoint: NetworkData = {
+                time: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
                 download: toMbps2(t.currentDown || 0),
                 upload: toMbps2(t.currentUp || 0),
-              }]);
+              };
+              setNetworkData(prev => {
+                const next = [...prev.slice(-(MAX_POINTS - 1)), newPoint];
+                (window as any).__networkHistory = next;
+                return next;
+              });
             } catch {}
-          }, 10000);
+          }, 15000);
         })
         .catch(() => {});
 

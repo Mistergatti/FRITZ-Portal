@@ -11,7 +11,7 @@ export default function System({ sid }: SystemProps) {
   const [rebooting, setRebooting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [version] = useState('1.3.5');
+  const [version] = useState('1.3.7');
   const [fritzHost, setFritzHost] = useState('fritz.box');
 
   // HA-Sensor-Einstellungen
@@ -21,6 +21,7 @@ export default function System({ sid }: SystemProps) {
     ha_sensors_traffic_interval: number;
     ha_available: boolean;
     mqtt_available: boolean;
+    debug_logging: boolean;
   } | null>(null);
   const [haSaving, setHaSaving] = useState(false);
   const [haMessage, setHaMessage] = useState('');
@@ -61,6 +62,7 @@ export default function System({ sid }: SystemProps) {
           ha_sensors:                  haSettings.ha_sensors,
           ha_sensors_interval:         haSettings.ha_sensors_interval,
           ha_sensors_traffic_interval: haSettings.ha_sensors_traffic_interval,
+          debug_logging:               haSettings.debug_logging,
         }),
       });
       const data = await res.json();
@@ -277,6 +279,30 @@ export default function System({ sid }: SystemProps) {
                 />
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Sek.</span>
               </div>
+            </div>
+
+            {/* Debug-Logging */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderTop: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 14 }}>Debug-Logging</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>Alle API-Anfragen (data.lua, SOAP) im Add-on-Protokoll ausgeben – hilfreich zur Fehlerdiagnose</div>
+              </div>
+              <button
+                onClick={() => setHaSettings(s => s ? { ...s, debug_logging: !s.debug_logging } : s)}
+                style={{
+                  width: 46, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+                  background: haSettings.debug_logging ? '#f59e0b' : '#6b7280',
+                  position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                }}
+                title={haSettings.debug_logging ? 'Deaktivieren' : 'Aktivieren'}
+              >
+                <span style={{
+                  position: 'absolute', top: 3,
+                  left: haSettings.debug_logging ? 23 : 3,
+                  width: 20, height: 20, borderRadius: '50%', background: 'white',
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                }} />
+              </button>
             </div>
 
             {/* Speichern */}

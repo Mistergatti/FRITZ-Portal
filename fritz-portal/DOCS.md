@@ -27,8 +27,8 @@ Dashboard für Ihre FRITZ!Box, direkt in Home Assistant integriert.
 | Option | Typ | Beschreibung | Beispiel |
 |--------|-----|-------------|----------|
 | `fritzbox_host` | string | Hostname oder IP der FRITZ!Box | `fritz.box` oder `192.168.178.1` |
-| `fritzbox_user` | string | Benutzername für die FRITZ!Box | `admin` |
-| `fritzbox_password` | string | Passwort des Benutzers | `geheim` |
+| `fritzbox_user` | string | Benutzername für die FRITZ!Box | `Admin` |
+| `fritzbox_password` | string | Passwort des Benutzers | `Geheim` |
 
 ### FRITZ!Box Benutzer einrichten
 

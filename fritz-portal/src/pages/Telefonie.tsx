@@ -5,12 +5,11 @@ interface TelefonieProps {
   sid: string;
 }
 
-type TelefonieTab = 'smartHome' | 'dect' | 'calls';
+type TelefonieTab = 'dect' | 'calls';
 
 export default function Telefonie({ sid }: TelefonieProps) {
-  const [tab, setTab] = useState<TelefonieTab>('smartHome');
+  const [tab, setTab] = useState<TelefonieTab>('dect');
   const [loading, setLoading] = useState(true);
-  const [devices, setDevices] = useState<any[]>([]);
   const [calls, setCalls] = useState<any[]>([]);
   const [dectInfo, setDectInfo] = useState<any>(null);
 
@@ -22,13 +21,11 @@ export default function Telefonie({ sid }: TelefonieProps) {
 
   const loadData = async () => {
     try {
-      const [devicesRes, callsRes, dectRes] = await Promise.all([
-        apiFetch('/api/fritz/smartHome', { headers }),
+      const [callsRes, dectRes] = await Promise.all([
         apiFetch('/api/fritz/calls', { headers }),
         apiFetch('/api/fritz/dect', { headers }),
       ]);
 
-      setDevices(await devicesRes.json());
       setCalls(await callsRes.json());
       setDectInfo(await dectRes.json());
     } catch (err) {
@@ -41,7 +38,6 @@ export default function Telefonie({ sid }: TelefonieProps) {
   if (loading) return <div className="loading"><div className="spinner" /></div>;
 
   const tabs: { id: TelefonieTab; label: string }[] = [
-    { id: 'smartHome', label: 'SmartHome' },
     { id: 'dect', label: 'DECT' },
     { id: 'calls', label: 'Anrufliste' },
   ];
@@ -50,7 +46,7 @@ export default function Telefonie({ sid }: TelefonieProps) {
     <div>
       <div className="page-header">
         <h2>Telefonie</h2>
-        <p>SmartHome, DECT und Anrufliste</p>
+        <p>DECT und Anrufliste</p>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
@@ -74,55 +70,8 @@ export default function Telefonie({ sid }: TelefonieProps) {
         ))}
       </div>
 
-      {tab === 'smartHome' && <SmartHomeTab devices={devices} />}
       {tab === 'dect' && <DECTTab dectInfo={dectInfo} />}
       {tab === 'calls' && <CallsTab calls={calls} />}
-    </div>
-  );
-}
-
-function SmartHomeTab({ devices }: { devices: any[] }) {
-  return (
-    <div>
-      <div className="card">
-        <div className="card-header">
-          <h3>SmartHome Ger\u00e4te</h3>
-          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{devices.length} Ger\u00e4te</span>
-        </div>
-        <div className="card-body">
-          {devices.length === 0 ? (
-            <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 32 }}>
-              Keine SmartHome Ger\u00e4te gefunden
-            </div>
-          ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Typ</th>
-                    <th>Status</th>
-                    <th>Temperatur</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {devices.map((dev, i) => (
-                    <tr key={i}>
-                      <td className="device-name">{dev.name || 'Unbekannt'}</td>
-                      <td>{dev.productname || '-'}</td>
-                      <td>
-                        <span className={`status-dot ${dev.present === '1' ? 'online' : 'offline'}`} />
-                        {dev.present === '1' ? 'Online' : 'Offline'}
-                      </td>
-                      <td>{dev.temperature ? `${dev.temperature / 10} \u00b0C` : '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -168,8 +117,10 @@ function DECTTab({ dectInfo }: { dectInfo: any }) {
                     <tr key={i}>
                       <td className="device-name">{h.name}</td>
                       <td>
-                        <span className={`status-dot ${h.connected ? 'online' : 'offline'}`} />
-                        {h.connected ? 'Verbunden' : 'Getrennt'}
+                        <span className={`status-dot ${h.active ? 'online' : 'offline'}`} />
+                        {h.active
+                          ? (h.connected ? 'Verbunden' : 'Aktiv / Bereitschaft')
+                          : 'Abgemeldet'}
                       </td>
                       <td>{h.battery ? `${h.battery}%` : '—'}</td>
                     </tr>

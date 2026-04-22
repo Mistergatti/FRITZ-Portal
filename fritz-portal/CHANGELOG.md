@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.7
+
+- Fix (BUG-01/02, Kritisch): Rate-Limiter für data.lua-Anfragen – maximal 3 parallele Anfragen, 300 ms Mindestabstand. Verhindert Fritz!Box-UI-Blockaden und SmartHome-Offlinephasen bei hoher Last (hoffentlich)
+- Fix (BUG-03/10): Startup-Warnung wenn Fritz!Box-Hostname nicht per DNS auflösbar ist – klare Fehlermeldung im Add-on-Protokoll statt stiller Fehler
+- Fix (BUG-04): Mesh-Timeouts von 10 s auf 5 s reduziert – UI blockiert nicht mehr bei langsamen Mesh-Antworten
+- Fix (BUG-07/08): WLAN-Schleife auf Netzwerk-Index 1–4 erweitert (war 1–3) – Gastnetzwerk und 6-GHz-Band werden jetzt korrekt abgefragt
+- Fix (BUG-09): IP-Sortierung in der Geräteliste ist jetzt numerisch statt alphabetisch (192.168.1.10 kommt nach 192.168.1.9)
+- Fix (BUG-13): Hintergrund-Timer von 10 s auf 15 s erhöht – weniger parallele Fritz!Box-Anfragen, geringere Systemlast
+- Fix (DECT): DECT-Handset-Status basiert jetzt auf dem Feld `active` (registriert) statt `connected` (DECT-Funkverbindung aktiv) – Geräte im Bereitschaftsmodus werden nicht mehr als "Getrennt" angezeigt, sondern als "Aktiv / Bereitschaft"
+- Neu: Dashboard-Graph zeigt jetzt die letzten 15 Minuten (60 Punkte à 15 s); der Verlauf bleibt bei Navigation zwischen Seiten erhalten und wird nicht neu aufgebaut
+- Neu: Geräteliste zeigt "FEST"-Badge bei statisch zugewiesener IP-Adresse; offline-Geräte zeigen die Zeit seit letzter Aktivität ("Zuletzt online") – server-seitig getrackt als Fallback falls Fritz!Box-Firmware das SOAP-Feld nicht liefert
+- Neu: IP-Adressen in der Geräteliste sind anklickbar und öffnen das Gerät (Web-UI) in einem neuen Browser-Tab
+- Neu: SmartHome als eigenständiger Menüpunkt im Hauptmenü; Telefonie zeigt nur noch DECT und Anrufliste
+- Neu: Debug-Logging-Modus – alle API-Anfragen (data.lua, SOAP) werden im Add-on-Protokoll ausgegeben; aktivierbar per `debug_logging: true` in der Add-on-Konfiguration oder über den neuen Toggle in den HA-Sensor-Einstellungen
+- Neu: `config.yaml` enthält `debug_logging: false` als neue Option mit Schema-Definition
+
 ## 1.3.6
 
 - Neu: GitHub Actions Workflow – bei jedem Release wird der `fritz-portal`-Ordner automatisch als ZIP-Asset angehängt
