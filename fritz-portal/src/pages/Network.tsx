@@ -160,6 +160,9 @@ interface MeshNode {
   is_meshed: boolean;
   model: string;
   interfaces: { type: string; name: string }[];
+  connDetail?: string;
+  connSpeed?: string;
+  connDisplay?: string;
 }
 
 interface MeshLink {
@@ -241,37 +244,25 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
     </div>
   );
 
+  const legendDot = (color: string) => ({ width: 12, height: 10, borderRadius: 3, background: color, display: 'inline-block' });
   const legend = showHostsView ? (
-    <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#06b6d4', display: 'inline-block' }} /> Fritz!Box
-      </span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} /> LAN
-      </span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} /> WLAN
-      </span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} /> Infrastruktur
-      </span>
+    <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#06b6d4')} /> Fritz!Box</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#3b82f6')} /> LAN</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#10b981')} /> WLAN</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#f59e0b')} /> Infrastruktur</span>
     </div>
   ) : (
-    <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#06b6d4')} /> Master</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#f59e0b')} /> Infrastruktur</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#3b82f6')} /> LAN-Client</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#10b981')} /> WLAN-Client</span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} /> Master
+        <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#3b82f6" strokeWidth="2" /></svg> LAN
       </span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} /> Satellite
-      </span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#6b7280', display: 'inline-block' }} /> Client
-      </span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#3b82f6" strokeWidth="2" /></svg> LAN
-      </span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#10b981" strokeWidth="2" strokeDasharray="6 3" /></svg> WLAN
+        <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#10b981" strokeWidth="2" strokeDasharray="6 3" /></svg> WLAN
       </span>
     </div>
   );
@@ -313,6 +304,11 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
     );
   }
 
+  const roleMeta = (node: MeshNode) => {
+    if (node.role === 'master') return { label: 'Fritz!Box', color: '#06b6d4' };
+    if (node.role === 'satellite' || isInfraDevice(node.name)) return { label: 'Infrastruktur', color: '#f59e0b' };
+    return { label: 'Client', color: 'var(--text-primary)' };
+  };
   const tooltipEl = tooltip && (
     <div style={{
       position: 'fixed', left: tooltip.x + 20, top: tooltip.y - 10,
@@ -323,11 +319,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
       <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 14 }}>{tooltip.node.name}</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px' }}>
         <span style={{ color: 'var(--text-secondary)' }}>Rolle</span>
-        <span style={{ textTransform: 'capitalize', color:
-          tooltip.node.role === 'master' ? '#06b6d4' :
-          tooltip.node.role === 'satellite' ? '#10b981' :
-          isInfraDevice(tooltip.node.name) ? '#f59e0b' : 'var(--text-primary)'
-        }}>{tooltip.node.role === 'master' ? 'Fritz!Box' : isInfraDevice(tooltip.node.name) ? 'Infrastruktur' : tooltip.node.role}</span>
+        <span style={{ color: roleMeta(tooltip.node).color }}>{roleMeta(tooltip.node).label}</span>
         {tooltip.node.mac && <><span style={{ color: 'var(--text-secondary)' }}>MAC</span><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{tooltip.node.mac}</span></>}
         {tooltip.node.ip && <><span style={{ color: 'var(--text-secondary)' }}>IP</span><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{tooltip.node.ip}</span></>}
         {tooltip.node.model && <><span style={{ color: 'var(--text-secondary)' }}>Modell</span><span>{tooltip.node.model}</span></>}
@@ -523,36 +515,84 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
     );
   }
 
-  // ── Hierarchisches Layout (Mesh-Ansicht) ──
-  const masterNodes = nodes.filter(n => n.role === 'master');
-  const satelliteNodes = nodes.filter(n => n.role === 'satellite');
-  const meshClientNodes = nodes.filter(n => n.role !== 'master' && n.role !== 'satellite');
-
-  const W = 760;
-  const displayNodes: (MeshNode & { x: number; y: number })[] = [];
-  const placeRow = (arr: MeshNode[], y: number) => {
-    if (arr.length === 0) return;
-    const spacing = Math.min(180, (W - 80) / arr.length);
-    const startX = W / 2 - ((arr.length - 1) * spacing) / 2;
-    arr.forEach((n, i) => displayNodes.push({ ...n, x: startX + i * spacing, y }));
+  // ── Vertikaler Tree (indentierte Baumansicht) ──
+  type TreeNode = MeshNode & {
+    children: TreeNode[];
+    linkType: string;
+    depth: number;
+    rowIdx: number;
   };
 
-  const rowHeight = 130;
-  let currentY = 80;
-  placeRow(masterNodes, currentY);
-  if (masterNodes.length > 0 && satelliteNodes.length > 0) currentY += rowHeight;
-  placeRow(satelliteNodes, currentY);
-  if ((masterNodes.length > 0 || satelliteNodes.length > 0) && meshClientNodes.length > 0) currentY += rowHeight;
-  placeRow(meshClientNodes.slice(0, 20), currentY);
+  const NODE_W = 360;
+  const NODE_H = 52;
+  const ROW_H = 64;
+  const INDENT = 28;
+  const PAD_X = 20;
+  const PAD_Y = 20;
+  const CONNECTOR_OFF = 16;  // x-Offset innerhalb des Eltern-Knotens für die Vertikallinie
 
-  const svgH = currentY + 110;
-  const nodeMap = new Map(displayNodes.map(n => [n.uid, n]));
+  const masterNode = nodes.find(n => n.role === 'master') || nodes[0];
+  const byUid = new Map<string, TreeNode>(
+    nodes.map(n => [n.uid, { ...n, children: [], linkType: 'LAN', depth: 0, rowIdx: 0 }])
+  );
+  const parentByChild = new Map<string, { parent: string; type: string }>();
+  for (const l of links) {
+    if (l.from && l.to && l.from !== l.to && !parentByChild.has(l.to)) {
+      parentByChild.set(l.to, { parent: l.from, type: l.type });
+    }
+  }
+  const rootTree = byUid.get(masterNode.uid)!;
+  for (const n of nodes) {
+    if (n.uid === masterNode.uid) continue;
+    const t = byUid.get(n.uid)!;
+    const p = parentByChild.get(n.uid);
+    const parentUid = p?.parent && byUid.has(p.parent) ? p.parent : masterNode.uid;
+    t.linkType = p?.type || (isWlanType(n.interfaces?.[0]?.type || '') ? 'WLAN' : 'LAN');
+    byUid.get(parentUid)!.children.push(t);
+  }
 
-  const roleStyle = {
-    master:    { fill: '#1d4ed8', stroke: '#3b82f6', r: 34 },
-    satellite: { fill: '#065f46', stroke: '#10b981', r: 28 },
-    client:    { fill: '#374151', stroke: '#6b7280', r: 22 },
+  const isInfraNode = (n: TreeNode) =>
+    n.role === 'satellite' || isInfraDevice(n.name) || n.children.length > 0;
+
+  // Sortierung: Infrastruktur zuerst, dann Name – stabil und vorhersagbar
+  const sortChildren = (n: TreeNode) => {
+    n.children.sort((a, b) => {
+      const ai = isInfraNode(a) ? 0 : 1;
+      const bi = isInfraNode(b) ? 0 : 1;
+      if (ai !== bi) return ai - bi;
+      return a.name.localeCompare(b.name, 'de');
+    });
+    n.children.forEach(sortChildren);
   };
+  sortChildren(rootTree);
+
+  // Depth-first flachen, rowIdx und depth zuweisen
+  const flat: TreeNode[] = [];
+  const flatten = (n: TreeNode, depth: number) => {
+    n.depth = depth;
+    n.rowIdx = flat.length;
+    flat.push(n);
+    for (const c of n.children) flatten(c, depth + 1);
+  };
+  flatten(rootTree, 0);
+
+  const maxDepth = flat.reduce((m, n) => Math.max(m, n.depth), 0);
+  const svgW = Math.max(600, PAD_X * 2 + maxDepth * INDENT + NODE_W);
+  const svgH = flat.length * ROW_H + PAD_Y * 2;
+
+  const xOf = (n: TreeNode) => PAD_X + n.depth * INDENT;
+  const yOf = (n: TreeNode) => PAD_Y + n.rowIdx * ROW_H;
+
+  const styleFor = (n: TreeNode) => {
+    if (n === rootTree || n.role === 'master') return { fill: '#0e4d6b', stroke: '#06b6d4' };
+    if (isInfraNode(n))                         return { fill: '#783d12', stroke: '#f59e0b' };
+    return isWlanType(n.linkType)
+      ? { fill: '#064e3b', stroke: '#10b981' }
+      : { fill: '#1e3a5f', stroke: '#3b82f6' };
+  };
+
+  const infraCount = flat.filter(n => n !== rootTree && isInfraNode(n)).length;
+  const clientCount = flat.length - 1 - infraCount;
 
   return (
     <div className="card">
@@ -560,78 +600,110 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h3>Mesh-Topologie</h3>{toggleBtn}</div>
         {legend}
       </div>
-      <div className="card-body" style={{ padding: 0, position: 'relative', overflowX: 'auto' }}
-           onMouseLeave={() => setTooltip(null)}>
-        <svg width="100%" viewBox={`0 0 ${W} ${svgH}`} style={{ display: 'block', minHeight: svgH, cursor: 'default' }}>
-          <defs>
-            {Object.entries(roleStyle).map(([role, s]) => (
-              <radialGradient key={role} id={`glow-${role}`} cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor={s.stroke} stopOpacity="0.3" />
-                <stop offset="100%" stopColor={s.stroke} stopOpacity="0" />
-              </radialGradient>
-            ))}
-          </defs>
-
-          {links.map((link, i) => {
-            const a = nodeMap.get(link.from);
-            const b = nodeMap.get(link.to);
-            if (!a || !b) return null;
-            const isWlan = isWlanType(link.type);
-            const color = isWlan ? '#10b981' : '#3b82f6';
-            const dash = isWlan ? '6 3' : '0';
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 24, padding: '10px 16px 2px', fontSize: 13, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+        <span>{flat.length} Geräte</span>
+        {infraCount > 0 && <span style={{ color: '#f59e0b' }}>● {infraCount} Infrastruktur</span>}
+        <span style={{ color: 'var(--text-primary)' }}>● {clientCount} Clients</span>
+      </div>
+      <div className="card-body" style={{ padding: 0, position: 'relative', overflow: 'auto' }}
+           onMouseLeave={() => { setTooltip(null); setHoveredUid(null); }}>
+        <svg width={svgW} height={svgH} style={{ display: 'block' }}>
+          {/* Vertikale "Pipes" pro Elternknoten (ein Strich von Eltern-Bottom zur Mitte des letzten Kindes) */}
+          {flat.map(parent => {
+            if (parent.children.length === 0) return null;
+            const lastChild = parent.children[parent.children.length - 1];
+            const px = xOf(parent) + CONNECTOR_OFF;
+            const y1 = yOf(parent) + NODE_H;
+            const y2 = yOf(lastChild) + NODE_H / 2;
             return (
-              <g key={i}>
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                  stroke={color} strokeWidth="2" strokeDasharray={dash} strokeOpacity="0.6" />
-                {link.speed > 0 && (
-                  <text x={(a.x+b.x)/2} y={(a.y+b.y)/2 - 6} textAnchor="middle" fontSize="10" fill={color} opacity="0.8">
-                    {link.speed >= 1000 ? `${(link.speed/1000).toFixed(0)} Gbit/s` : `${link.speed} Mbit/s`}
-                  </text>
-                )}
-              </g>
+              <line key={`v-${parent.uid}`}
+                x1={px} y1={y1} x2={px} y2={y2}
+                stroke="var(--text-secondary)" strokeOpacity="0.35"
+                strokeWidth="1.5" />
             );
           })}
-
-          {displayNodes.map(node => {
-            const s = roleStyle[node.role as keyof typeof roleStyle] || roleStyle.client;
+          {/* Horizontale L-Abzweige: pro Kind vom Eltern-Connector zur linken Kante der Kind-Box,
+              eingefärbt nach Verbindungstyp (LAN blau / WLAN grün gestrichelt) */}
+          {flat.flatMap(parent => parent.children.map(child => {
+            const wlan = isWlanType(child.linkType);
+            const color = wlan ? '#10b981' : '#3b82f6';
+            const dash = wlan ? '5 3' : '0';
+            const x1 = xOf(parent) + CONNECTOR_OFF;
+            const x2 = xOf(child);
+            const cy = yOf(child) + NODE_H / 2;
+            const isOnHover = hoveredUid === child.uid || hoveredUid === parent.uid;
+            const opacity = hoveredUid ? (isOnHover ? 0.95 : 0.12) : 0.75;
             return (
-              <g key={node.uid} transform={`translate(${node.x},${node.y})`} style={{ cursor: 'pointer' }}
+              <line key={`h-${child.uid}`}
+                x1={x1} y1={cy} x2={x2} y2={cy}
+                stroke={color} strokeWidth={isOnHover ? 2.5 : 1.8}
+                strokeDasharray={dash} strokeLinecap="round"
+                strokeOpacity={opacity}
+                style={{ transition: 'stroke-opacity 0.15s' }}
+              />
+            );
+          }))}
+
+          {/* Knoten als abgerundete Rechtecke, links ausgerichtet */}
+          {flat.map(n => {
+            const s = styleFor(n);
+            const isHovered = hoveredUid === n.uid;
+            const isRoot = n === rootTree;
+            const connLabel = isWlanType(n.linkType) ? 'WLAN' : 'LAN';
+            const connColor = isWlanType(n.linkType) ? '#10b981' : '#3b82f6';
+            return (
+              <g key={n.uid}
+                transform={`translate(${xOf(n)},${yOf(n)})`}
+                style={{ cursor: 'pointer' }}
                 onMouseEnter={e => {
+                  setHoveredUid(n.uid);
                   const svgEl = (e.currentTarget.closest('svg') as SVGSVGElement);
                   const rect = svgEl.getBoundingClientRect();
-                  setTooltip({ node, x: node.x * (rect.width / W) + rect.left, y: node.y * (rect.height / svgH) + rect.top });
+                  setTooltip({ node: n, x: rect.left + xOf(n) + NODE_W, y: rect.top + yOf(n) });
                 }}
-                onMouseLeave={() => setTooltip(null)}
+                onMouseLeave={() => { setHoveredUid(null); setTooltip(null); }}
               >
-                <circle cx={0} cy={0} r={s.r + 14} fill={`url(#glow-${node.role})`} />
-                <circle cx={0} cy={0} r={s.r} fill={s.fill} stroke={s.stroke} strokeWidth="2.5" />
-                {node.role === 'master' && (
-                  <g fill="none" stroke="white" strokeWidth="1.5">
-                    <rect x="-12" y="-8" width="24" height="16" rx="3" />
-                    <circle cx="-6" cy="0" r="1.5" fill="white" stroke="none" />
-                    <circle cx="0"  cy="0" r="1.5" fill="white" stroke="none" />
-                    <circle cx="6"  cy="0" r="1.5" fill="white" stroke="none" />
-                    <line x1="-8" y1="-8" x2="-10" y2="-14" />
-                    <line x1="0"  y1="-8" x2="0"   y2="-14" />
-                    <line x1="8"  y1="-8" x2="10"  y2="-14" />
-                  </g>
-                )}
-                {node.role === 'satellite' && (
-                  <g fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round">
-                    <path d="M-9 2 Q0 -10 9 2" /><path d="M-5 5 Q0 -1 5 5" />
-                    <circle cx="0" cy="8" r="1.5" fill="white" stroke="none" />
-                  </g>
-                )}
-                {node.role === 'client' && (
-                  <g fill="none" stroke="white" strokeWidth="1.5">
-                    <rect x="-8" y="-9" width="16" height="12" rx="2" />
-                    <line x1="-4" y1="3" x2="4" y2="3" /><line x1="0" y1="3" x2="0" y2="7" /><line x1="-4" y1="7" x2="4" y2="7" />
-                  </g>
-                )}
-                <text y={s.r + 16} textAnchor="middle" fontSize="12" fill="var(--text-primary)" fontWeight="500">
-                  {node.name.length > 16 ? node.name.slice(0, 14) + '…' : node.name}
-                </text>
-                {node.ip && <text y={s.r + 30} textAnchor="middle" fontSize="10" fill="var(--text-secondary)">{node.ip}</text>}
+                <rect width={NODE_W} height={NODE_H} rx={10} ry={10}
+                  fill={s.fill} stroke={s.stroke}
+                  strokeWidth={isHovered ? 2.5 : 1.5}
+                  style={{ transition: 'stroke-width 0.15s, filter 0.15s' }}
+                  filter={isHovered ? 'drop-shadow(0 0 6px rgba(255,255,255,0.3))' : undefined}
+                />
+                {(() => {
+                  // Badge-Text vorberechnen (für Root ohne Badge)
+                  let badgeTxt = '';
+                  if (!isRoot) {
+                    badgeTxt = n.connDisplay || '';
+                    if (!badgeTxt) {
+                      const parts = [n.connDetail ? `${connLabel} ${n.connDetail}` : connLabel];
+                      if (n.connSpeed) parts.push(n.connSpeed);
+                      badgeTxt = parts.join(' → ');
+                    }
+                  }
+                  const badgeW = isRoot ? 0 : Math.max(44, Math.min(180, badgeTxt.length * 6.5 + 14));
+                  const badgeX = NODE_W - badgeW - 12;
+                  // Max Breite für Namens- und IP-Text → Platzbedarf des Badges abziehen
+                  const nameMaxChars = Math.max(10, Math.floor((badgeX - 24) / 7));
+                  const displayName = n.name.length > nameMaxChars ? n.name.slice(0, nameMaxChars - 1) + '…' : n.name;
+                  return (
+                    <>
+                      <text x={16} y={22} fontSize={isRoot ? 14 : 13} fontWeight="600" fill="#fff">
+                        {displayName}
+                      </text>
+                      <text x={16} y={40} fontSize="11" fill="rgba(255,255,255,0.72)" fontFamily="monospace">
+                        {n.ip || (isRoot ? 'FRITZ!Box' : '—')}
+                      </text>
+                      {!isRoot && (
+                        <g>
+                          <rect x={badgeX} y={NODE_H/2 - 10} width={badgeW} height={20} rx={10}
+                            fill="rgba(0,0,0,0.3)" stroke={connColor} strokeOpacity="0.8" strokeWidth="1" />
+                          <text x={badgeX + badgeW/2} y={NODE_H/2 + 4} textAnchor="middle" fontSize="10"
+                            fontWeight="600" fill={connColor}>{badgeTxt}</text>
+                        </g>
+                      )}
+                    </>
+                  );
+                })()}
               </g>
             );
           })}

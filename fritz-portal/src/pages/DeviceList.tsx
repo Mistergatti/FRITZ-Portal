@@ -10,6 +10,10 @@ interface Host {
   interface: string;
   addressSource?: string;
   lastActivity?: string;
+  connType?: 'LAN' | 'WLAN';
+  connDetail?: string;
+  connSpeed?: string;
+  connDisplay?: string;
 }
 
 interface IpStats {
@@ -148,8 +152,10 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
     return `vor ${Math.floor(diff / 86400)} Tagen`;
   };
 
-  const isWlan = (iface: string) => {
-    const s = String(iface || '').toLowerCase();
+  const isWlan = (h: Host) => {
+    if (h.connType === 'WLAN') return true;
+    if (h.connType === 'LAN')  return false;
+    const s = String(h.interface || '').toLowerCase();
     return s.includes('wlan') || s.includes('802');
   };
 
@@ -169,7 +175,7 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
         break;
       }
       case 'connection':
-        cmp = (isWlan(a.interface || '') ? 'wlan' : 'lan').localeCompare(isWlan(b.interface || '') ? 'wlan' : 'lan');
+        cmp = (isWlan(a) ? 'wlan' : 'lan').localeCompare(isWlan(b) ? 'wlan' : 'lan');
         break;
     }
     return sortDir === 'asc' ? cmp : -cmp;
@@ -298,21 +304,33 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                     </td>
                     <td className="device-mac">{host.mac}</td>
                     <td>
-                      {isWlan(host.interface) ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M5 12.55a11 11 0 0 1 14.08 0" /><path d="M1.42 9a16 16 0 0 1 21.16 0" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><circle cx="12" cy="20" r="1" fill="currentColor" />
+                      {(() => {
+                        const wlan = isWlan(host);
+                        const color = wlan ? '#10b981' : '#3b82f6';
+                        const icon = wlan ? (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
+                            <path d="M5 12.55a11 11 0 0 1 14.08 0" /><path d="M1.42 9a16 16 0 0 1 21.16 0" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><circle cx="12" cy="20" r="1" fill={color} />
                           </svg>
-                          WLAN
-                        </span>
-                      ) : (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
                             <rect x="1" y="6" width="22" height="12" rx="2" /><line x1="1" y1="10" x2="23" y2="10" />
                           </svg>
-                          LAN
-                        </span>
-                      )}
+                        );
+                        // Anzeigetext: vorgeformatierter connDisplay aus netDev hat Vorrang
+                        let label = host.connDisplay || '';
+                        if (!label) {
+                          const prefix = wlan ? 'WLAN' : 'LAN';
+                          const parts = [host.connDetail ? `${prefix} ${host.connDetail}` : prefix];
+                          if (host.connSpeed) parts.push(host.connSpeed);
+                          label = parts.join(' → ');
+                        }
+                        return (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color }}>
+                            {icon}
+                            <span style={{ whiteSpace: 'nowrap' }}>{label}</span>
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                       {host.active

@@ -201,12 +201,41 @@ async function collectEcoHistory(session) {
 setInterval(async () => {
   for (const [sid, session] of sessions) {
     try {
-      let addonInfo = await soapRequest(session.host, 'urn:schemas-upnp-org:service:WANCommonInterfaceConfig:1', 'GetAddonInfos', session.username, session.password, session.controlUrls);
-      if (!addonInfo['NewByteSendRate'] && !addonInfo['NewTotalBytesReceived']) {
-        addonInfo = await soapRequest(session.host, 'urn:dslforum-org:service:WANCommonInterfaceConfig:1', 'GetAddonInfos', session.username, session.password, session.controlUrls);
+      // Primär: data.lua?page=netMon – dieselbe Quelle, die die Fritz!Box-UI für den Live-Graph
+      // nutzt. Liefert pro Sync-Gruppe eine Historie der letzten Sekunden als `ds_bps_curr` /
+      // `us_default_bps_curr` in Bytes/s. `GetAddonInfos` (SOAP) ist ein 1-Sekunden-Snapshot
+      // und verpasst Bursts – für den Live-Wert verwenden wir darum netMon.
+      let downBps = 0, upBps = 0;
+      try {
+        const webSid = await getCachedWebSid(session);
+        if (webSid) {
+          const params = new URLSearchParams({ xhr: '1', sid: webSid, lang: 'de', page: 'netMon', xhrId: 'all' });
+          const r = await fetch(`http://${session.host}/data.lua`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+          });
+          const text = await r.text();
+          if (text.trim().startsWith('{')) {
+            const group = JSON.parse(text)?.data?.sync_groups?.[0];
+            const ds = group?.ds_bps_curr || [];
+            const us = group?.us_default_bps_curr || [];
+            if (ds.length) downBps = Number(ds[ds.length - 1]) || 0;
+            if (us.length) upBps   = Number(us[us.length - 1]) || 0;
+          }
+        }
+      } catch {}
+      // Fallback: GetAddonInfos wenn netMon nichts lieferte
+      if (downBps === 0 && upBps === 0) {
+        try {
+          let addonInfo = await soapRequest(session.host, 'urn:schemas-upnp-org:service:WANCommonInterfaceConfig:1', 'GetAddonInfos', session.username, session.password, session.controlUrls);
+          if (!addonInfo['NewByteSendRate'] && !addonInfo['NewTotalBytesReceived']) {
+            addonInfo = await soapRequest(session.host, 'urn:dslforum-org:service:WANCommonInterfaceConfig:1', 'GetAddonInfos', session.username, session.password, session.controlUrls);
+          }
+          downBps = parseInt(addonInfo['NewByteReceiveRate'] || '0', 10) || 0;
+          upBps = parseInt(addonInfo['NewByteSendRate'] || '0', 10) || 0;
+        } catch {}
       }
-      const downBps = parseInt(addonInfo['NewByteReceiveRate'] || '0', 10) || 0;
-      const upBps = parseInt(addonInfo['NewByteSendRate'] || '0', 10) || 0;
       const now = Date.now();
       trafficHistory.down.push({ time: now, value: downBps });
       trafficHistory.up.push({ time: now, value: upBps });
@@ -461,6 +490,117 @@ async function getDeviceInfoViaSoap(host, username, password, controlUrls) {
   return soapRequest(host, 'urn:dslforum-org:service:DeviceInfo:1', 'GetInfo', username, password, controlUrls);
 }
 
+// ── netDev-Cache: Fritz-Weboberfläche liefert unter data.lua?page=netDev deutlich
+// mehr Infos (conn_type, conn_speed, wlan_band, port) als TR-064 SOAP. Wir cachen 15 s
+// und reichen die Daten an /api/fritz/hosts UND /api/fritz/mesh weiter.
+async function fetchNetDevMap(session) {
+  const cached = getCached('netdev-map', 15000);
+  if (cached) return cached;
+  const webSid = await getCachedWebSid(session);
+  if (!webSid) { const empty = new Map(); setCached('netdev-map', empty, 5000); return empty; }
+  try {
+    const params = new URLSearchParams({ xhr: '1', sid: webSid, lang: 'de', page: 'netDev', xhrId: 'cleanup' });
+    const r = await fetch(`http://${session.host}/data.lua`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    const text = await r.text();
+    if (!text.trim().startsWith('{')) { const empty = new Map(); setCached('netdev-map', empty, 5000); return empty; }
+    const raw = JSON.parse(text);
+    const d = raw?.data || raw || {};
+    const map = new Map();
+    const add = (dev) => {
+      const mac = String(dev?.mac || '').replace(/-/g, ':').toLowerCase();
+      if (mac) map.set(mac, dev);
+    };
+    if (Array.isArray(d.active))  d.active.forEach(add);
+    if (Array.isArray(d.passive)) d.passive.forEach(add);
+    setCached('netdev-map', map, 15000);
+    return map;
+  } catch (err) {
+    console.log(`netDev-Cache Fehler: ${err.message}`);
+    const empty = new Map();
+    setCached('netdev-map', empty, 5000);
+    return empty;
+  }
+}
+
+// Gemeinsame WLAN-Erkennung – muss mit der in normalizeMeshDevices übereinstimmen,
+// damit Mesh-Ansicht und Geräteliste dieselben Geräte als WLAN markieren.
+function deviceIsWlan(d) {
+  if (!d) return false;
+  if (d.conn === 'wlan' || d.conn === 'guest') return true;
+  if (d.conn === 'lan' || d.conn === 'ethernet') return false;
+  if (d.master_wifi_uid) return true;
+  if (Array.isArray(d.wlan_UIDs) && d.wlan_UIDs.length > 0) return true;
+  if (d.wlan === true || d.active_wlan === true || d.wlan_active === true) return true;
+  if (d.wlan?.is_active || d.wlan?.band || d.wlan_std || d.wlan_band) return true;
+  if (typeof d.rssi === 'number' && d.rssi !== 0) return true;
+  if (d.wlan_show_rssi === 1 || d.wlan_show_rssi === '1') return true;
+  const port = String(d.port || d.port_name || '').toLowerCase();
+  if (port.includes('wlan') || port.includes('wifi')) return true;
+  const s = String(d.conn_type || d.connType || d.medium || d.interface || d.ifname || '').toLowerCase();
+  return s.includes('wlan') || s.includes('wifi') || s.includes('wireless') || s.includes('802.11');
+}
+
+// Verbindungsinfo in menschlich lesbares Format bringen: "LAN 2 → 1 Gbit/s" oder
+// "WLAN 2,4 GHz → 58 Mbit/s". Wenn die Fritz!Box eine vorgefertigte Zeichenkette liefert
+// (conn_info/ipinfo), bevorzugen wir die – die trifft das offizielle UI-Wording am besten.
+function formatConnDetail(d) {
+  if (!d) return { type: '', detail: '', speed: '' };
+  const wlan = deviceIsWlan(d);
+  const type = wlan ? 'WLAN' : 'LAN';
+
+  // Speed extrahieren
+  const speedRaw = d.conn_speed || d.speed || d.cur_data_rate_rx || d.txrate || d.rxrate || 0;
+  let speedStr = '';
+  if (typeof speedRaw === 'number' && speedRaw > 0) {
+    speedStr = speedRaw >= 1000 ? `${(speedRaw / 1000).toFixed(speedRaw % 1000 === 0 ? 0 : 1)} Gbit/s` : `${speedRaw} Mbit/s`;
+  } else if (typeof speedRaw === 'string' && speedRaw) {
+    speedStr = speedRaw;
+  }
+
+  let detail = '';
+  if (wlan) {
+    const band = d.wlan_band || d.wlan?.band || '';
+    if (band) {
+      const bandStr = String(band);
+      // Zahlwerte: 2 -> 2,4 GHz, 5 -> 5 GHz, 6 -> 6 GHz
+      if (bandStr === '2' || bandStr === '24' || /2[,.]?4/.test(bandStr)) detail = '2,4 GHz';
+      else if (/^5/.test(bandStr)) detail = '5 GHz';
+      else if (/^6/.test(bandStr)) detail = '6 GHz';
+      else detail = bandStr;
+    }
+  } else {
+    // LAN: Port-Nummer (port_name ist oft schon formatiert wie "LAN 1")
+    if (d.port_name) {
+      const pn = String(d.port_name);
+      // Entferne doppeltes "LAN" falls schon im port_name enthalten
+      detail = pn.replace(/^lan\s*/i, '');
+    } else if (typeof d.port === 'number' && d.port > 0) {
+      detail = String(d.port);
+    } else if (typeof d.port === 'string' && /^\d+$/.test(d.port) && d.port !== '0') {
+      detail = d.port;
+    }
+  }
+
+  // Vollständiger Anzeigetext zusammenbauen
+  let display = '';
+  if (d.conn_info || d.ipinfo) {
+    const s = String(d.conn_info || d.ipinfo);
+    // Nur übernehmen wenn es LAN/WLAN-typisch aussieht
+    if (/\d+\s*(g?bit|mbit)/i.test(s) || /lan\s*\d/i.test(s) || /wlan/i.test(s)) display = s;
+  }
+  if (!display) {
+    const parts = [type + (detail ? ' ' + detail : '')];
+    if (speedStr) parts.push(speedStr);
+    display = parts.join(' → ');
+  }
+
+  return { type, detail, speed: speedStr, display };
+}
+
 // ── Endpoints ──
 
 app.get('/api/fritz/auto-session', async (req, res) => {
@@ -543,7 +683,32 @@ app.get('/api/fritz/hosts', async (req, res) => {
   const cached = getCached('hosts', 60000); // Hosts 60s cachen – ändert sich selten
   if (cached) return res.json(cached);
   try {
-    const hosts = await getHostsViaSoap(session.host, session.username, session.password, session.controlUrls);
+    // SOAP-Hostliste + netDev parallel holen. netDev liefert die bessere WLAN/LAN-
+    // Klassifizierung und die Port-/Geschwindigkeitsdetails, die die Fritz-UI anzeigt.
+    const [hosts, netDevMap] = await Promise.all([
+      getHostsViaSoap(session.host, session.username, session.password, session.controlUrls),
+      fetchNetDevMap(session),
+    ]);
+    for (const h of hosts) {
+      const dev = netDevMap.get(h.mac);
+      if (!dev) continue;
+      const conn = formatConnDetail(dev);
+      // interface-Feld so setzen, dass der Frontend-isWlan()-Check korrekt greift
+      h.interface = conn.type === 'WLAN' ? '802.11' : 'Ethernet';
+      h.connType = conn.type;       // 'LAN' | 'WLAN'
+      h.connDetail = conn.detail;   // '2' / '2,4 GHz' / '5 GHz' …
+      h.connSpeed = conn.speed;     // '1 Gbit/s' / '58 Mbit/s' …
+      h.connDisplay = conn.display; // 'LAN 2 → 1 Gbit/s'
+      // Feste IP aus netDev ableiten – TR-064 NewAddressSource meldet auf vielen Boxen
+      // weiterhin "DHCP" obwohl eine statische Reservierung vorliegt. netDev kennt das
+      // Flag dagegen zuverlässig über `static_dhcp` oder `ipv4.static_dhcp`.
+      const isStatic =
+        dev.static_dhcp === true || dev.static_dhcp === 1 || dev.static_dhcp === '1' ||
+        dev.ipv4?.static_dhcp === true || dev.ipv4?.static_dhcp === 1 || dev.ipv4?.static_dhcp === '1' ||
+        dev.is_static === true ||
+        (typeof dev.dhcp === 'string' && dev.dhcp === '2');
+      if (isStatic) h.addressSource = 'Static';
+    }
     setCached('hosts', hosts);
     return res.json(hosts);
   } catch (err) {
@@ -1163,30 +1328,50 @@ app.get('/api/fritz/mesh', async (req, res) => {
   const webSid = await getCachedWebSid(session);
   if (!webSid) { console.log('Mesh: kein webSid verfügbar'); return res.json({ nodes: [], links: [] }); }
 
-  // Alle Seiten + meshlist.lua parallel abfragen (statt seriell) → max. 5s Wartezeit
-  async function tryDataLuaPage(page) {
+  // timeoutFetch: Timer startet erst wenn fetch tatsächlich anläuft (nach Rate-Limiter),
+  // sonst würde die Wartezeit in der Queue das Timeout verbrauchen und zu Abbrüchen führen.
+  async function timeoutFetch(url, opts = {}, ms = 8000) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const combined = { ...opts, signal: ctrl.signal };
+    const p = fetch(url, combined);
+    let timer;
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => { ctrl.abort(); reject(new Error('timeout')); }, ms);
+    });
     try {
-      const params = new URLSearchParams({ xhr: '1', sid: webSid, lang: 'de', page, xhrId: 'all' });
-      const r = await fetch(`http://${session.host}/data.lua`, {
+      return await Promise.race([p, timeoutPromise]);
+    } finally { clearTimeout(timer); }
+  }
+
+  async function tryDataLuaPage(page, xhrId = 'all', timeoutMs = 15000) {
+    try {
+      const params = new URLSearchParams({ xhr: '1', sid: webSid, lang: 'de', page, xhrId });
+      const r = await timeoutFetch(`http://${session.host}/data.lua`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: params.toString(),
-        signal: ctrl.signal,
-      });
+      }, timeoutMs);
       const text = await r.text();
-      console.log(`Mesh: page=${page} status=${r.status} length=${text.length}`);
+      console.log(`Mesh: page=${page}${xhrId !== 'all' ? ' xhrId=' + xhrId : ''} status=${r.status} length=${text.length}`);
       if (!text.trim().startsWith('{')) return null;
       const raw = JSON.parse(text);
       const d = raw?.data || raw || {};
 
       const nodeList = d.nodes || d.meshNodes || d.mesh_nodes ||
-                       d.topology?.nodes || d.topo?.nodes || null;
+                       d.topology?.nodes || d.topo?.nodes ||
+                       d.vars?.topology?.nodes || null;
       const linkList = d.links || d.meshLinks || d.mesh_links ||
-                       d.topology?.links || d.topo?.links || null;
+                       d.topology?.links || d.topo?.links ||
+                       d.vars?.topology?.links || null;
       if (nodeList && Array.isArray(nodeList) && nodeList.length > 0) {
         return normalizeMeshData(nodeList, linkList || []);
+      }
+
+      // netDev-Format: { data: { active: [...], passive: [...] } } – das ist die Quelle,
+      // die die Fritz-Weboberfläche selbst für die Mesh-Ansicht nutzt.
+      const activeDevices = Array.isArray(d.active) ? d.active : null;
+      if (activeDevices && activeDevices.length > 0) {
+        return normalizeMeshDevices(activeDevices);
       }
 
       const devices = d.devices || d.data || [];
@@ -1201,16 +1386,14 @@ app.get('/api/fritz/mesh', async (req, res) => {
     } catch (err) {
       console.log(`Mesh: page=${page} Fehler: ${err.message}`);
       return null;
-    } finally { clearTimeout(timer); }
+    }
   }
 
-  async function tryMeshlist() {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5000);
+  async function tryUrl(label, url) {
     try {
-      const r = await fetch(`http://${session.host}/meshlist.lua?sid=${webSid}`, { signal: ctrl.signal });
+      const r = await timeoutFetch(url, {}, 8000);
       const text = await r.text();
-      console.log(`Mesh: meshlist.lua status=${r.status} length=${text.length}`);
+      console.log(`Mesh: ${label} status=${r.status} length=${text.length}`);
       if (r.status === 404) return null;
       if (!text.trim().startsWith('{')) return null;
       const raw = JSON.parse(text);
@@ -1218,45 +1401,77 @@ app.get('/api/fritz/mesh', async (req, res) => {
       if (nodeList.length > 0) return normalizeMeshData(nodeList, raw?.meshlist?.links || raw?.links || []);
       return null;
     } catch (err) {
-      console.log(`Mesh: meshlist.lua Fehler: ${err.message}`);
+      console.log(`Mesh: ${label} Fehler: ${err.message}`);
       return null;
-    } finally { clearTimeout(timer); }
+    }
   }
 
-  // Alternativer Endpunkt: /net/mesh_overview.lua (manche FritzOS-Versionen)
-  async function tryMeshOverview() {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5000);
-    try {
-      const r = await fetch(`http://${session.host}/net/mesh_overview.lua?sid=${webSid}`, { signal: ctrl.signal });
-      const text = await r.text();
-      console.log(`Mesh: mesh_overview.lua status=${r.status} length=${text.length}`);
-      if (r.status === 404) return null;
-      if (!text.trim().startsWith('{')) return null;
-      const raw = JSON.parse(text);
-      const nodeList = raw?.nodes || raw?.meshlist?.nodes || [];
-      if (nodeList.length > 0) return normalizeMeshData(nodeList, raw?.links || raw?.meshlist?.links || []);
-      return null;
-    } catch (err) {
-      console.log(`Mesh: mesh_overview.lua Fehler: ${err.message}`);
-      return null;
-    } finally { clearTimeout(timer); }
-  }
+  console.log('Mesh: starte Abfragen (gestaffelt, mit Early-Exit)');
 
-  console.log('Mesh: starte parallele Abfragen');
-  const results = await Promise.all([
-    tryDataLuaPage('meshTopo'),
-    tryDataLuaPage('netTopo'),
-    tryDataLuaPage('hostTopo'),
-    tryDataLuaPage('mesh'),
-    tryDataLuaPage('meshSet'),
-    tryDataLuaPage('meshNet'),
-    tryMeshlist(),
-    tryMeshOverview(),
+  // Phase 1: Nicht-data.lua-Endpunkte parallel – umgehen den Rate-Limiter
+  const phase1 = await Promise.all([
+    tryUrl('meshlist.lua',              `http://${session.host}/meshlist.lua?sid=${webSid}`),
+    tryUrl('internet/meshlist.lua',     `http://${session.host}/internet/meshlist.lua?sid=${webSid}&useajax=1`),
+    tryUrl('mesh_overview.lua',         `http://${session.host}/net/mesh_overview.lua?sid=${webSid}`),
   ]);
+  let found = phase1.find(r => r !== null);
 
-  const found = results.find(r => r !== null);
+  // Phase 2: data.lua-Seiten seriell mit Early-Exit – verhindert Rate-Limiter-Staus.
+  // netDev+xhrId=cleanup ist die Quelle, die die Fritz-Weboberfläche selbst für die
+  // Mesh-Ansicht nutzt (liefert data.active mit mesh_role pro Gerät) → zuerst versuchen.
+  // Für unbekannte Seiten hängt die Fritz!Box teilweise bis zum Timeout, daher kurze
+  // Timeouts für die spekulativen Fallback-Seiten.
+  if (!found) {
+    const pages = [
+      ['netDev',   'cleanup', 15000],
+      ['mesh',     'all',     15000],
+      ['meshTopo', 'all',      6000],
+      ['netTopo',  'all',      6000],
+      ['hostTopo', 'all',      6000],
+    ];
+    for (const [page, xhrId, ms] of pages) {
+      const r = await tryDataLuaPage(page, xhrId, ms);
+      if (r) { found = r; break; }
+    }
+  }
+
   if (found) {
+    // Fritz!Box als Master sicherstellen – viele netDev-Responses enthalten die Box selbst
+    // nicht in `data.active`, wodurch ein zufälliger Client als Master erschien.
+    const hasMaster = (found.nodes || []).some(n => n.role === 'master');
+    if (!hasMaster) {
+      const MASTER_UID = '__fritzbox_master__';
+      const di = getCached('device-info');
+      const masterName = di?.NewModelName || 'FRITZ!Box';
+      const masterIp = String(session.host || '').replace(/^https?:\/\//, '').split(':')[0];
+      const masterNode = {
+        uid: MASTER_UID,
+        name: masterName,
+        mac: di?.NewMACAddress || '',
+        ip: masterIp,
+        role: 'master',
+        is_meshed: true,
+        model: masterName,
+        interfaces: [{ type: 'LAN', name: '' }],
+      };
+      found.nodes = [masterNode, ...(found.nodes || [])];
+      // Waisen-Knoten (ohne eingehenden Link) unter den Master hängen.
+      const linkedTo = new Set((found.links || []).map(l => l.to));
+      const newLinks = [];
+      for (const n of found.nodes) {
+        if (n.uid === MASTER_UID) continue;
+        if (!linkedTo.has(n.uid)) {
+          newLinks.push({
+            from:  MASTER_UID,
+            to:    n.uid,
+            type:  n.interfaces?.[0]?.type || 'LAN',
+            speed: 0,
+          });
+        }
+      }
+      found.links = [...(found.links || []), ...newLinks];
+      console.log(`Mesh: Kein Master im Response – FRITZ!Box als Master injiziert (${newLinks.length} Waisen verbunden)`);
+    }
     setCached('mesh-topology', found, 30000);
     return res.json(found);
   }
@@ -1301,23 +1516,42 @@ function normalizeMeshData(nodes, links) {
 }
 
 function normalizeMeshDevices(devices) {
-  const nodes = devices.map((d, i) => ({
-    uid:       d.mac || d.uid || String(i),
-    name:      d.name || d.hostname || d.FriendlyName || `Gerät ${i + 1}`,
-    mac:       d.mac || d.MACAddress || '',
-    ip:        d.ip || d.IPAddress || '',
-    role:      d.is_mesh_master || d.meshRole === 'master' || d.mesh_role === 'master' ? 'master'
-             : d.mesh_role === 'satellite' || d.meshRole === 'satellite' ? 'satellite'
-             : 'client',
-    is_meshed: true,
-    model:     d.model || d.device_model || '',
-    interfaces: [],
-  }));
-  // Links aus Parent-Referenzen ableiten
+  const roleOf = (d) => {
+    if (d.active_mesh_master === 1 || d.active_mesh_master === '1') return 'master';
+    if (d.is_mesh_master || d.own === true || d.is_own === true || d.own_device_data) return 'master';
+    if (d.type === 'mesh_master' || d.type === 'own') return 'master';
+    if (d.mesh_role === 'master' || d.meshRole === 'master') return 'master';
+    if (d.mesh_role === 'slave' || d.mesh_role === 'satellite' || d.meshRole === 'satellite') return 'satellite';
+    return 'client';
+  };
+  const nodes = devices.map((d, i) => {
+    const conn = formatConnDetail(d);
+    return {
+      uid:       d.UID || d.uid || d.mac || String(i),
+      name:      d.name || d.friendly_name || d.hostname || d.FriendlyName || `Gerät ${i + 1}`,
+      mac:       d.mac || d.MACAddress || '',
+      ip:        d.ipv4?.ip || d.ip || d.IPAddress || '',
+      role:      roleOf(d),
+      is_meshed: d.is_mesh_supported !== false,
+      model:     d.model || d.device_model || d.product || '',
+      interfaces: [{ type: conn.type || 'LAN', name: '' }],
+      connDetail:  conn.detail,
+      connSpeed:   conn.speed,
+      connDisplay: conn.display,
+    };
+  });
+  // Links aus Parent-Referenzen ableiten – bevorzugt master_wifi_uid (WLAN-Parent).
   const links = [];
   devices.forEach(d => {
-    if (d.parent_uid || d.master_uid) {
-      links.push({ from: d.parent_uid || d.master_uid, to: d.mac || d.uid, type: d.medium || 'WiFi', speed: 0 });
+    const parentUid = d.master_wifi_uid || d.parent?.uid || d.parent_uid || d.master_uid;
+    const childUid  = d.UID || d.uid || d.mac;
+    if (parentUid && childUid && parentUid !== childUid) {
+      links.push({
+        from:  parentUid,
+        to:    childUid,
+        type:  deviceIsWlan(d) ? 'WLAN' : 'LAN',
+        speed: d.cur_data_rate_rx || d.speed || 0,
+      });
     }
   });
   return { nodes, links };
@@ -1388,12 +1622,16 @@ app.get('/api/fritz/dect', async (req, res) => {
     for (let i = 0; i < count; i++) {
       try {
         const entry = await soapRequest(session.host, 'urn:dslforum-org:service:X_AVM-DE_Dect:1', 'GetGenericDectEntry', session.username, session.password, session.controlUrls, { NewIndex: String(i) });
+        const name = entry.NewDeviceName || entry.NewName || '';
+        // GetGenericDectEntry listet nur REGISTRIERTE Handsets – deshalb active=true
+        // wenn ein Name vorhanden ist. NewActive/NewConnected werden je nach Firmware
+        // unterschiedlich interpretiert und liefern auf vielen Boxen '0' im Bereitschaftsmodus.
         handsets.push({
-          name: entry.NewDeviceName || entry.NewName || `Handset ${i + 1}`,
+          name: name || `Handset ${i + 1}`,
           model: entry.NewManufacturerOUI || '',
           id: entry.NewIntId || entry.NewId || String(i),
-          active: entry.NewActive === '1',
-          connected: entry.NewConnected === '1',
+          active: !!name,
+          connected: entry.NewActive === '1' || entry.NewConnected === '1',
           battery: entry.NewBatteryChargeStat || entry.NewBattery || '',
         });
       } catch {}
@@ -1431,12 +1669,19 @@ app.get('/api/fritz/dect', async (req, res) => {
               for (const list of candidates) {
                 if (Array.isArray(list) && list.length > 0) {
                   for (const h of list) {
+                    const name = h.name || h.device_name || h.devicename || h.displayname || '';
+                    // data.lua listet registrierte Handsets – wenn ein Name vorhanden ist,
+                    // gilt das Gerät als registriert/aktiv. Die einzelnen Statusfelder
+                    // (active, connect, registered, state) werden je nach Firmware anders belegt.
+                    const reachable = h.active === '1' || h.active === true
+                      || h.connect === '1' || h.connected === '1' || h.connected === true
+                      || h.registered === '1' || h.state === 'connected';
                     handsets.push({
-                      name: h.name || h.device_name || h.devicename || h.displayname || 'Handset',
+                      name: name || 'Handset',
                       model: h.model || h.product || h.productname || '',
                       id: String(h.id || h.intern_id || h.index || ''),
-                      active: h.active === '1' || h.active === true,
-                      connected: h.connect === '1' || h.connected === '1' || h.connected === true || h.registered === '1',
+                      active: !!name,
+                      connected: reachable,
                       battery: String(h.battery || h.akku || h.batterycharge || ''),
                     });
                   }
@@ -1449,6 +1694,7 @@ app.get('/api/fritz/dect', async (req, res) => {
         }
       }
     }
+    if (handsets.length > 0 && baseInfo.NewDECTActive !== '1') baseInfo.NewDECTActive = '1';
     return res.json({ ...baseInfo, handsets });
   } catch (err) {
     console.error('DECT error:', err.message);

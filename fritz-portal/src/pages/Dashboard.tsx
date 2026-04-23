@@ -179,7 +179,8 @@ export default function Dashboard({ sid }: DashboardProps) {
           setApiCache('network-stats', trafficData);
           setTraffic(trafficData);
 
-          const toMbps = (b: number) => parseFloat(((b * 8) / (1024 * 1024)).toFixed(2));
+          // Dezimale Mbit/s (wie die Fritz!Box-UI zeigt) – 1 Mbit/s = 1.000.000 bit/s
+          const toMbps = (b: number) => parseFloat(((b * 8) / 1_000_000).toFixed(2));
           const MAX_POINTS = 60; // 15 Minuten bei 15s Intervall
 
           // Bestehenden Graph-Verlauf wiederverwenden (Navigation hin/her);
@@ -215,7 +216,7 @@ export default function Dashboard({ sid }: DashboardProps) {
               ]);
               setEcoStats(s);
               setTraffic(t);
-              const toMbps2 = (b: number) => parseFloat(((b * 8) / (1024 * 1024)).toFixed(2));
+              const toMbps2 = (b: number) => parseFloat(((b * 8) / 1_000_000).toFixed(2));
               const newPoint: NetworkData = {
                 time: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
                 download: toMbps2(t.currentDown || 0),
@@ -253,7 +254,7 @@ export default function Dashboard({ sid }: DashboardProps) {
   };
 
   const formatGB = (bytes: number) => (bytes / (1024 * 1024 * 1024)).toFixed(2);
-  const formatMbps = (bytes: number) => ((bytes * 8) / (1024 * 1024)).toFixed(1);
+  const formatMbps = (bytes: number) => ((bytes * 8) / 1_000_000).toFixed(1);
 
   if (loading) return <div className="loading"><div className="spinner" /></div>;
 
