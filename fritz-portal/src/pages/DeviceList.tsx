@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
 import { getApiCache, setApiCache } from '../App';
+import { useT } from '../lib/i18n';
 
 interface Host {
   mac: string;
@@ -30,6 +31,7 @@ interface DeviceListProps {
 }
 
 export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
+  const t = useT();
   const [hosts, setHosts] = useState<Host[]>([]);
   const [ipStats, setIpStats] = useState<IpStats>({ total: 0, used: 0, free: 0, minAddress: '', maxAddress: '' });
   const [freeIpNumbers, setFreeIpNumbers] = useState<number[]>([]);
@@ -146,10 +148,10 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
     const n = parseInt(ts, 10);
     if (!n) return '';
     const diff = Math.floor((Date.now() / 1000) - n);
-    if (diff < 60) return 'gerade eben';
-    if (diff < 3600) return `vor ${Math.floor(diff / 60)} Min`;
-    if (diff < 86400) return `vor ${Math.floor(diff / 3600)} Std`;
-    return `vor ${Math.floor(diff / 86400)} Tagen`;
+    if (diff < 60) return t('gerade eben');
+    if (diff < 3600) return t('vor {n} Min').replace('{n}', String(Math.floor(diff / 60)));
+    if (diff < 86400) return t('vor {n} Std').replace('{n}', String(Math.floor(diff / 3600)));
+    return t('vor {n} Tagen').replace('{n}', String(Math.floor(diff / 86400)));
   };
 
   const isWlan = (h: Host) => {
@@ -189,11 +191,11 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
   return (
     <div>
       <div className="page-header">
-        <h2>Netzwerk Ger{"\u00e4"}te</h2>
+        <h2>{t('Netzwerk Ger\u00e4te')}</h2>
         <p>
           {ipStats.total > 0
-            ? <>{ipStats.total} IP-Adressen {'\u2014'} {ipStats.used} vergeben {'\u2014'} {ipStats.free} verf{"\u00fc"}gbar</>
-            : <>{hosts.length} Ger{"\u00e4"}te insgesamt {'\u2014'} {onlineCount} online {'\u2014'} {offlineCount} offline</>
+            ? t('{n} IP-Adressen \u2014 {u} vergeben \u2014 {f} verf\u00fcgbar').replace('{n}', String(ipStats.total)).replace('{u}', String(ipStats.used)).replace('{f}', String(ipStats.free))
+            : t('{n} Ger\u00e4te insgesamt \u2014 {on} online \u2014 {off} offline').replace('{n}', String(hosts.length)).replace('{on}', String(onlineCount)).replace('{off}', String(offlineCount))
           }
         </p>
       </div>
@@ -205,7 +207,7 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
               <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
             </svg>
           </div>
-          <h3>Gesamt</h3>
+          <h3>{t('Gesamt')}</h3>
           <div className="value">{hosts.length}</div>
         </div>
         <div className="stat-card">
@@ -214,7 +216,7 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
             </svg>
           </div>
-          <h3>Online</h3>
+          <h3>{t('Online')}</h3>
           <div className="value">{onlineCount}</div>
         </div>
         <div className="stat-card">
@@ -223,7 +225,7 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
               <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
             </svg>
           </div>
-          <h3>Offline</h3>
+          <h3>{t('Offline')}</h3>
           <div className="value">{offlineCount}</div>
         </div>
         <div className="stat-card">
@@ -232,7 +234,7 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
               <rect x="2" y="2" width="20" height="8" rx="2" /><rect x="2" y="14" width="20" height="8" rx="2" /><line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" />
             </svg>
           </div>
-          <h3>Freie IPs</h3>
+          <h3>{t('Freie IPs')}</h3>
           <div className="value" style={{ fontSize: 16, fontWeight: 500 }}>
             {freeIpNumbers.length > 0 ? freeIpNumbers.join(', ') : '-'}
           </div>
@@ -241,10 +243,10 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
 
       <div className="card">
         <div className="card-header">
-          <h3>Alle Ger{"\u00e4"}te</h3>
+          <h3>{t('Alle Ger\u00e4te')}</h3>
           <input
             type="text"
-            placeholder="Suchen..."
+            placeholder={t('Suchen...')}
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
@@ -263,12 +265,12 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
             <table>
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('status')}>Status{getSortIndicator('status')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('name')}>Name{getSortIndicator('name')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('ip')}>IP-Adresse{getSortIndicator('ip')}</th>
-                  <th>MAC-Adresse</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('connection')}>Verbindung{getSortIndicator('connection')}</th>
-                  <th>Zuletzt online</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('status')}>{t('Status')}{getSortIndicator('status')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('name')}>{t('Name')}{getSortIndicator('name')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('ip')}>{t('IP-Adresse')}{getSortIndicator('ip')}</th>
+                  <th>{t('MAC-Adresse')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('connection')}>{t('Verbindung')}{getSortIndicator('connection')}</th>
+                  <th>{t('Zuletzt online')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -276,9 +278,9 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                   <tr key={i} onClick={() => onSelectDevice(host.mac)} style={{ cursor: 'pointer' }}>
                     <td>
                       <span className={`status-dot ${host.active ? 'online' : 'offline'}`} />
-                      {host.active ? 'Online' : 'Offline'}
+                      {host.active ? t('Online') : t('Offline')}
                     </td>
-                    <td className="device-name">{host.name || 'Unbekannt'}</td>
+                    <td className="device-name">{host.name || t('Unbekannt')}</td>
                     <td>
                       {host.ip ? (
                         <>
@@ -288,16 +290,16 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                             rel="noopener noreferrer"
                             onClick={e => e.stopPropagation()}
                             style={{ color: 'var(--text-primary)', textDecoration: 'none' }}
-                            title={`${host.ip} im Browser öffnen`}
+                            title={t('{ip} im Browser öffnen').replace('{ip}', host.ip)}
                           >
                             {host.ip}
                           </a>
                           {host.addressSource === 'Static' && (
-                            <span title="Feste IP-Adresse" style={{
+                            <span title={t('Feste IP-Adresse')} style={{
                               marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '1px 5px',
                               borderRadius: 4, background: '#3b82f620', color: '#3b82f6',
                               border: '1px solid #3b82f640', verticalAlign: 'middle',
-                            }}>FEST</span>
+                            }}>{t('FEST')}</span>
                           )}
                         </>
                       ) : '—'}
@@ -342,7 +344,7 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 32 }}>
-                      Keine Ger{"\u00e4"}te gefunden
+                      {t('Keine Ger\u00e4te gefunden')}
                     </td>
                   </tr>
                 )}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import { useT } from '../lib/i18n';
 
 interface TelefonieProps {
   sid: string;
@@ -8,6 +9,7 @@ interface TelefonieProps {
 type TelefonieTab = 'dect' | 'calls';
 
 export default function Telefonie({ sid }: TelefonieProps) {
+  const t = useT();
   const [tab, setTab] = useState<TelefonieTab>('dect');
   const [loading, setLoading] = useState(true);
   const [calls, setCalls] = useState<any[]>([]);
@@ -38,15 +40,15 @@ export default function Telefonie({ sid }: TelefonieProps) {
   if (loading) return <div className="loading"><div className="spinner" /></div>;
 
   const tabs: { id: TelefonieTab; label: string }[] = [
-    { id: 'dect', label: 'DECT' },
-    { id: 'calls', label: 'Anrufliste' },
+    { id: 'dect', label: t('DECT') },
+    { id: 'calls', label: t('Anrufliste') },
   ];
 
   return (
     <div>
       <div className="page-header">
-        <h2>Telefonie</h2>
-        <p>DECT und Anrufliste</p>
+        <h2>{t('Telefonie')}</h2>
+        <p>{t('DECT und Anrufliste')}</p>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
@@ -70,25 +72,25 @@ export default function Telefonie({ sid }: TelefonieProps) {
         ))}
       </div>
 
-      {tab === 'dect' && <DECTTab dectInfo={dectInfo} />}
-      {tab === 'calls' && <CallsTab calls={calls} />}
+      {tab === 'dect' && <DECTTab dectInfo={dectInfo} t={t} />}
+      {tab === 'calls' && <CallsTab calls={calls} t={t} />}
     </div>
   );
 }
 
-function DECTTab({ dectInfo }: { dectInfo: any }) {
+function DECTTab({ dectInfo, t }: { dectInfo: any; t: (s: string) => string }) {
   const handsets: any[] = dectInfo?.handsets || [];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="card">
-        <div className="card-header"><h3>DECT Basisstation</h3></div>
+        <div className="card-header"><h3>{t('DECT Basisstation')}</h3></div>
         <div className="card-body">
           <table>
             <tbody>
-              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 220 }}>DECT aktiv</td><td>{dectInfo?.NewDECTActive === '1' ? 'Ja' : 'Nein'}</td></tr>
-              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Basisname</td><td>{dectInfo?.NewDECTBaseName || '—'}</td></tr>
-              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Eco Mode</td><td>{dectInfo?.NewDECTPowerActive === '1' ? 'Aktiv' : 'Inaktiv'}</td></tr>
-              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Pin</td><td>{dectInfo?.NewDECTPin ? '****' : 'Nicht gesetzt'}</td></tr>
+              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 220 }}>{t('DECT aktiv')}</td><td>{dectInfo?.NewDECTActive === '1' ? t('Ja') : t('Nein')}</td></tr>
+              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Basisname')}</td><td>{dectInfo?.NewDECTBaseName || '—'}</td></tr>
+              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Eco Mode')}</td><td>{dectInfo?.NewDECTPowerActive === '1' ? t('Aktiv') : t('Inaktiv')}</td></tr>
+              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Pin')}</td><td>{dectInfo?.NewDECTPin ? '****' : t('Nicht gesetzt')}</td></tr>
             </tbody>
           </table>
         </div>
@@ -96,35 +98,49 @@ function DECTTab({ dectInfo }: { dectInfo: any }) {
 
       <div className="card">
         <div className="card-header">
-          <h3>Angemeldete Handsets</h3>
-          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{handsets.length} Gerät{handsets.length !== 1 ? 'e' : ''}</span>
+          <h3>{t('Angemeldete Handsets')}</h3>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{handsets.length === 1 ? t('{n} Gerät').replace('{n}', '1') : t('{n} Geräte ').replace('{n}', String(handsets.length)).trim()}</span>
         </div>
         <div className="card-body">
           {handsets.length === 0 ? (
-            <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 32 }}>Keine DECT-Geräte gefunden</div>
+            <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 32 }}>{t('Keine DECT-Geräte gefunden')}</div>
           ) : (
             <div className="table-container">
               <table>
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>Akku</th>
+                    <th>{t('Name')}</th>
+                    <th>{t('Status')}</th>
+                    <th>{t('Akku')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {handsets.map((h: any, i: number) => (
-                    <tr key={i}>
-                      <td className="device-name">{h.name}</td>
-                      <td>
-                        <span className={`status-dot ${h.active ? 'online' : 'offline'}`} />
-                        {h.active
-                          ? (h.connected ? 'Verbunden' : 'Aktiv / Bereitschaft')
-                          : 'Abgemeldet'}
-                      </td>
-                      <td>{h.battery ? `${h.battery}%` : '—'}</td>
-                    </tr>
-                  ))}
+                  {handsets.map((h: any, i: number) => {
+                    // NewActive ist firmware-abhängig: manche Boxen melden 0 auch bei
+                    // aktiven Handsets im Tiefschlaf, andere unterscheiden korrekt.
+                    // Deshalb bewusst weiches Label "Standby / Aus" – wir können
+                    // standby und off via TR-064 nicht zuverlässig unterscheiden.
+                    const label = h.connected
+                      ? t('Im Gespräch')
+                      : h.active
+                        ? t('Aktiv / Bereitschaft')
+                        : h.registered
+                          ? t('Standby / Aus')
+                          : t('Abgemeldet');
+                    // Akku-Wert > 0 ist ein zusätzliches Lebenszeichen – Punkt grün
+                    const batteryPct = parseInt(String(h.battery || '0'), 10) || 0;
+                    const dotClass = h.connected || h.active || batteryPct > 0 ? 'online' : 'offline';
+                    return (
+                      <tr key={i}>
+                        <td className="device-name">{h.name}</td>
+                        <td>
+                          <span className={`status-dot ${dotClass}`} />
+                          {label}
+                        </td>
+                        <td>{h.battery ? `${h.battery}%` : '—'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -135,38 +151,41 @@ function DECTTab({ dectInfo }: { dectInfo: any }) {
   );
 }
 
-function CallsTab({ calls }: { calls: any[] }) {
+function CallsTab({ calls, t }: { calls: any[]; t: (s: string) => string }) {
   const [filter, setFilter] = useState<string>('all');
 
+  // AVM-Call-XML: 1=eingehend, 2=verpasst, 3=ausgehend, 9=aktiv eingehend,
+  // 10=abgewiesen, 11=aktiv ausgehend.
   function callLabel(type: string) {
     switch (type) {
-      case '1':  return { label: 'Eingehend',  color: '#22c55e' };
-      case '2':  return { label: 'Ausgehend',  color: '#3b82f6' };
-      case '3':  return { label: 'Verpasst',   color: '#ef4444' };
-      case '10': return { label: 'Aktiv ein.', color: '#22c55e' };
-      case '11': return { label: 'Aktiv aus.', color: '#3b82f6' };
-      default:   return { label: `Typ ${type}`, color: 'var(--text-secondary)' };
+      case '1':  return { label: t('Eingehend'),  color: '#22c55e' };
+      case '2':  return { label: t('Verpasst'),   color: '#ef4444' };
+      case '3':  return { label: t('Ausgehend'),  color: '#3b82f6' };
+      case '9':  return { label: t('Aktiv ein.'), color: '#22c55e' };
+      case '10': return { label: t('Abgewiesen'), color: '#f59e0b' };
+      case '11': return { label: t('Aktiv aus.'), color: '#3b82f6' };
+      default:   return { label: t('Typ {t}').replace('{t}', type), color: 'var(--text-secondary)' };
     }
   }
 
   const filterOptions = [
-    { id: 'all',       label: 'Alle' },
-    { id: 'incoming',  label: 'Eingehend' },
-    { id: 'outgoing',  label: 'Ausgehend' },
-    { id: 'missed',    label: 'Verpasst' },
+    { id: 'all',       label: t('Alle') },
+    { id: 'incoming',  label: t('Eingehend') },
+    { id: 'outgoing',  label: t('Ausgehend') },
+    { id: 'missed',    label: t('Verpasst') },
   ];
 
   const filtered = calls.filter(c => {
-    if (filter === 'incoming') return c.type === '1' || c.type === '10';
-    if (filter === 'outgoing') return c.type === '2' || c.type === '11';
-    if (filter === 'missed')   return c.type === '3';
+    if (filter === 'incoming') return c.type === '1' || c.type === '9';
+    if (filter === 'outgoing') return c.type === '3' || c.type === '11';
+    if (filter === 'missed')   return c.type === '2';
     return true;
   });
 
   return (
     <div className="card">
       <div className="card-header">
-        <h3>Anrufliste</h3>
+        <h3>{t('Anrufliste')}</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {filterOptions.map(opt => (
             <button
@@ -187,25 +206,27 @@ function CallsTab({ calls }: { calls: any[] }) {
             </button>
           ))}
           <span style={{ color: 'var(--text-secondary)', fontSize: 13, marginLeft: 8 }}>
-            {filtered.length} Einträge
+            {t('{n} Einträge').replace('{n}', String(filtered.length))}
           </span>
         </div>
       </div>
       <div className="card-body">
         {filtered.length === 0 ? (
           <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 32 }}>
-            Keine Anrufe gefunden
+            {t('Keine Anrufe gefunden')}
           </div>
         ) : (
           <div className="table-container">
             <table>
               <thead>
                 <tr>
-                  <th>Datum</th>
-                  <th>Name</th>
-                  <th>Rufnummer</th>
-                  <th>Typ</th>
-                  <th>Dauer</th>
+                  <th>{t('Datum')}</th>
+                  <th>{t('Name')}</th>
+                  <th>{t('Von')}</th>
+                  <th>{t('An')}</th>
+                  <th>{t('Gerät')}</th>
+                  <th>{t('Typ')}</th>
+                  <th>{t('Dauer')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,8 +235,10 @@ function CallsTab({ calls }: { calls: any[] }) {
                   return (
                     <tr key={i}>
                       <td style={{ whiteSpace: 'nowrap' }}>{call.date || '—'}</td>
-                      <td className="device-name">{call.name || 'Unbekannt'}</td>
-                      <td style={{ fontFamily: 'monospace' }}>{call.number || '—'}</td>
+                      <td className="device-name">{call.name || t('Unbekannt')}</td>
+                      <td style={{ fontFamily: 'monospace' }}>{call.from || '—'}</td>
+                      <td style={{ fontFamily: 'monospace' }}>{call.to || '—'}</td>
+                      <td style={{ color: 'var(--text-secondary)' }}>{call.device || '—'}</td>
                       <td><span style={{ color, fontWeight: 500 }}>{label}</span></td>
                       <td>{call.duration || '—'}</td>
                     </tr>

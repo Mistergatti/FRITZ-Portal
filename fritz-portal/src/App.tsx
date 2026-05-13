@@ -9,6 +9,7 @@ import Telefonie from './pages/Telefonie';
 import SmartHome from './pages/SmartHome';
 import System from './pages/System';
 import { apiFetch } from './lib/apiFetch';
+import { I18nProvider, useT } from './lib/i18n';
 
 type Page = 'dashboard' | 'devices' | 'device-detail' | 'network' | 'traffic' | 'telefonie' | 'smarthome' | 'system';
 
@@ -40,6 +41,15 @@ function setApiCache(key: string, data: any) {
 export { getApiCache, setApiCache };
 
 export default function App() {
+  return (
+    <I18nProvider>
+      <AppInner />
+    </I18nProvider>
+  );
+}
+
+function AppInner() {
+  const t = useT();
   const [sid, setSid] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
@@ -63,13 +73,13 @@ export default function App() {
           setError(null);
         } else {
           console.log('Auto-login failed - no credentials configured in Add-On');
-          setError('Add-On nicht konfiguriert. Bitte FRITZ!Box Zugangsdaten im Add-On eintragen.');
+          setError(t('Add-On nicht konfiguriert. Bitte FRITZ!Box Zugangsdaten im Add-On eintragen.'));
         }
         setLoading(false);
       })
       .catch((err: any) => {
         console.error('Auto-login error:', err);
-        setError('Verbindung zum Server fehlgeschlagen. Add-On läuft nicht korrekt.');
+        setError(t('Verbindung zum Server fehlgeschlagen. Add-On läuft nicht korrekt.'));
         setLoading(false);
       });
   }, []);
@@ -90,7 +100,7 @@ export default function App() {
       if (data.active && data.sid) { setSid(data.sid); return; }
     } catch {}
     setSid(null);
-    setError('Abgemeldet. Bitte Add-On neu starten.');
+    setError(t('Abgemeldet. Bitte Add-On neu starten.'));
   };
 
   const handleSelectDevice = (mac: string) => {
@@ -111,7 +121,7 @@ export default function App() {
           <div className="logo">
             <div className="icon"></div>
             <h1>FRITZ!Portal</h1>
-            <p>Wird initialisiert...</p>
+            <p>{t('Wird initialisiert...')}</p>
           </div>
         </div>
       </div>
@@ -128,12 +138,12 @@ export default function App() {
             <h1>FRITZ!Portal</h1>
           </div>
           <div className="error-message">
-            {error || 'Fehler beim Autostart. Bitte Add-On-Konfiguration überprüfen.'}
+            {error || t('Fehler beim Autostart. Bitte Add-On-Konfiguration überprüfen.')}
           </div>
           <div style={{ padding: '20px', fontSize: '14px', color: '#999', textAlign: 'center' }}>
-            <p><strong>Konfiguration erforderlich:</strong></p>
-            <p>Home Assistant → Einstellungen → Add-Ons → FRITZ!Portal → Konfiguration</p>
-            <p>Geben Sie FRITZ!Box-Adresse, Benutzername und Passwort ein.</p>
+            <p><strong>{t('Konfiguration erforderlich:')}</strong></p>
+            <p>{t('Home Assistant → Einstellungen → Add-Ons → FRITZ!Portal → Konfiguration')}</p>
+            <p>{t('Geben Sie FRITZ!Box-Adresse, Benutzername und Passwort ein.')}</p>
           </div>
         </div>
       </div>

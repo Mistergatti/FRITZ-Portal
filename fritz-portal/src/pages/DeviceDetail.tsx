@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import { useT } from '../lib/i18n';
 
 interface Host {
   mac: string;
@@ -16,6 +17,7 @@ interface DeviceDetailProps {
 }
 
 export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
+  const t = useT();
   const [hosts, setHosts] = useState<Host[]>([]);
   const [loading, setLoading] = useState(true);
   const [blocked, setBlocked] = useState(false);
@@ -159,8 +161,8 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
     return (
       <div>
         <div className="page-header">
-          <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 14, marginBottom: 8, padding: 0 }}>{'\u2190'} Zur{'\u00fc'}ck</button>
-          <h2>Ger{'\u00e4'}t nicht gefunden</h2>
+          <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 14, marginBottom: 8, padding: 0 }}>{'\u2190 '}{t('Zur\u00fcck')}</button>
+          <h2>{t('Ger\u00e4t nicht gefunden')}</h2>
         </div>
       </div>
     );
@@ -171,24 +173,24 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
   return (
     <div>
       <div className="page-header">
-        <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 14, marginBottom: 8, padding: 0 }}>{'\u2190'} Zur{'\u00fc'}ck zur Liste</button>
-        <h2>{device.name || 'Unbekannt'}</h2>
-        <p>Ger{'\u00e4'}tedetails f{'\u00fc'}r {device.mac}</p>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 14, marginBottom: 8, padding: 0 }}>{t('\u2190 Zur\u00fcck zur Liste')}</button>
+        <h2>{device.name || t('Unbekannt')}</h2>
+        <p>{t('Ger\u00e4tedetails f\u00fcr {mac}').replace('{mac}', device.mac)}</p>
       </div>
 
       {message && <div className={message.includes('Fehler') ? 'error-message' : 'success-message'}>{message}</div>}
 
       <div className="card">
         <div className="card-header">
-          <h3>Ger{'\u00e4'}teinformationen</h3>
+          <h3>{t('Ger\u00e4teinformationen')}</h3>
           <span className={`status-dot ${device.active ? 'online' : 'offline'}`} style={{ marginLeft: 8 }} />
-          <span style={{ fontSize: 14 }}>{device.active ? 'Online' : 'Offline'}</span>
+          <span style={{ fontSize: 14 }}>{device.active ? t('Online') : t('Offline')}</span>
         </div>
         <div className="card-body">
           <table>
             <tbody>
               <tr>
-                <td style={{ fontWeight: 500, width: 200, color: 'var(--text-secondary)' }}>Name</td>
+                <td style={{ fontWeight: 500, width: 200, color: 'var(--text-secondary)' }}>{t('Name')}</td>
                 <td>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -196,7 +198,7 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
                         type="text"
                         value={deviceName}
                         onChange={e => setDeviceName(e.target.value)}
-                        placeholder={device.name || 'Ger\u00e4tename'}
+                        placeholder={device.name || t('Ger\u00e4tename')}
                         style={{
                           padding: '6px 10px',
                           borderRadius: 6,
@@ -213,37 +215,37 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
                         disabled={saving || !deviceName}
                         style={{ padding: '6px 12px', fontSize: 13 }}
                       >
-                        {saving ? '...' : 'Speichern'}
+                        {saving ? '...' : t('Speichern')}
                       </button>
                     </div>
                     <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                      Leerzeichen werden zu Bindestrichen, Umlaute werden umgeschrieben
+                      {t('Leerzeichen werden zu Bindestrichen, Umlaute werden umgeschrieben')}
                     </span>
                   </div>
                 </td>
               </tr>
               <tr>
-                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>IP-Adresse</td>
+                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('IP-Adresse')}</td>
                 <td>
                   <span style={{ fontFamily: 'monospace' }}>{device.ip}</span>
                   {staticDhcp?.exists && (
-                    <span style={{ marginLeft: 10, fontSize: 12, color: '#22c55e', fontWeight: 500 }}>&#x1f512; fest zugewiesen</span>
+                    <span style={{ marginLeft: 10, fontSize: 12, color: '#22c55e', fontWeight: 500 }}>&#x1f512; {t('fest zugewiesen')}</span>
                   )}
                 </td>
               </tr>
               <tr>
-                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>MAC-Adresse</td>
+                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('MAC-Adresse')}</td>
                 <td style={{ fontFamily: 'monospace' }}>{device.mac}</td>
               </tr>
               <tr>
-                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Status</td>
+                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Status')}</td>
                 <td>
                   <span className={`status-dot ${device.active ? 'online' : 'offline'}`} />
-                  {device.active ? 'Online' : 'Offline'}
+                  {device.active ? t('Online') : t('Offline')}
                 </td>
               </tr>
               <tr>
-                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Verbindung</td>
+                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Verbindung')}</td>
                 <td>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     {isWlan ? (
@@ -266,7 +268,7 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
               </tr>
               {device.interface && (
                 <tr>
-                  <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Interface</td>
+                  <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Interface')}</td>
                   <td style={{ fontFamily: 'monospace' }}>{device.interface}</td>
                 </tr>
               )}
@@ -274,18 +276,18 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
           </table>
 
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-            <h4 style={{ marginBottom: 12, fontSize: 14 }}>Ger{'\u00e4'}tekontrolle</h4>
+            <h4 style={{ marginBottom: 12, fontSize: 14 }}>{t('Ger\u00e4tekontrolle')}</h4>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <button
                 className={`btn ${blocked ? 'btn-primary' : 'btn-danger'}`}
                 onClick={handleBlock}
                 disabled={blocking}
               >
-                {blocking ? 'Wird ausgef\u00fchrt...' : blocked ? 'Internet freigeben' : 'Internet sperren'}
+                {blocking ? t('Wird ausgef\u00fchrt...') : blocked ? t('Internet freigeben') : t('Internet sperren')}
               </button>
               {blocked && (
                 <span style={{ color: 'var(--danger)', fontSize: 13, fontWeight: 500 }}>
-                  {'\u26d4'} Ger\u00e4t ist gesperrt
+                  {'\u26d4'} {t('Ger\u00e4t ist gesperrt')}
                 </span>
               )}
             </div>
@@ -295,14 +297,14 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
 
       <div className="card">
         <div className="card-header">
-          <h3>IPv4-Adresse dauerhaft zuweisen</h3>
+          <h3>{t('IPv4-Adresse dauerhaft zuweisen')}</h3>
           {staticDhcp?.exists && (
-            <span style={{ fontSize: 13, color: '#22c55e', fontWeight: 500 }}>&#x2713; Reservierung aktiv: {staticDhcp.ip}</span>
+            <span style={{ fontSize: 13, color: '#22c55e', fontWeight: 500 }}>&#x2713; {t('Reservierung aktiv: {ip}').replace('{ip}', staticDhcp.ip)}</span>
           )}
         </div>
         <div className="card-body">
           <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>
-            Weist diesem Ger&auml;t immer die gleiche IPv4-Adresse zu (DHCP-Reservierung). Das Ger&auml;t erh&auml;lt diese IP bei jeder Verbindung automatisch.
+            {t('Weist diesem Gerät immer die gleiche IPv4-Adresse zu (DHCP-Reservierung). Das Gerät erhält diese IP bei jeder Verbindung automatisch.')}
           </p>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <input
@@ -327,7 +329,7 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
               disabled={settingDhcp || !staticDhcpInput}
               style={{ padding: '6px 14px', fontSize: 13 }}
             >
-              {settingDhcp ? '...' : staticDhcp?.exists ? 'Reservierung aktualisieren' : 'Dauerhaft zuweisen'}
+              {settingDhcp ? '...' : staticDhcp?.exists ? t('Reservierung aktualisieren') : t('Dauerhaft zuweisen')}
             </button>
             {staticDhcp?.exists && (
               <button
@@ -336,7 +338,7 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
                 disabled={settingDhcp}
                 style={{ padding: '6px 14px', fontSize: 13 }}
               >
-                Reservierung entfernen
+                {t('Reservierung entfernen')}
               </button>
             )}
           </div>
@@ -345,7 +347,7 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
 
       <div className="card">
         <div className="card-header">
-          <h3>Traffic</h3>
+          <h3>{t('Traffic')}</h3>
         </div>
         <div className="card-body">
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0 }}>

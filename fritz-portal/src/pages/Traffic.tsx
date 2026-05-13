@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import { useT } from '../lib/i18n';
 
 interface Counter {
   name: string;
@@ -14,6 +15,7 @@ interface TrafficProps {
 }
 
 export default function Traffic({ sid }: TrafficProps) {
+  const t = useT();
   const [counters, setCounters] = useState<Counter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -35,10 +37,10 @@ export default function Traffic({ sid }: TrafficProps) {
         const allZero = rows.every(c => c.received === 0 && c.sent === 0);
         setBytesAvailable(!allZero);
       } else {
-        setError(data.debug ? `Server: ${data.debug}` : 'Keine Zählerdaten empfangen.');
+        setError(data.debug ? `Server: ${data.debug}` : t('Keine Zählerdaten empfangen.'));
       }
     } catch {
-      setError('Fehler beim Laden der Trafficzähler.');
+      setError(t('Fehler beim Laden der Trafficzähler.'));
     } finally {
       setLoading(false);
     }
@@ -65,8 +67,8 @@ export default function Traffic({ sid }: TrafficProps) {
   return (
     <div>
       <div className="page-header">
-        <h2>Traffic</h2>
-        <p>Online-Z{'\u00e4'}hler &amp; Datenvolumen</p>
+        <h2>{t('Traffic')}</h2>
+        <p>{t('Online-Z\u00e4hler & Datenvolumen')}</p>
       </div>
 
       {error && (
@@ -93,7 +95,7 @@ export default function Traffic({ sid }: TrafficProps) {
           color: 'var(--text-secondary)',
           fontSize: 14,
         }}>
-          <strong style={{ color: 'var(--text-primary)' }}>Datenvolumen nicht verfügbar</strong> – Die Fritz!Box liefert keine Volumen-Statistik.
+          <strong style={{ color: 'var(--text-primary)' }}>{t('Datenvolumen nicht verfügbar')}</strong> – Die Fritz!Box liefert keine Volumen-Statistik.
           Bitte prüfe in der Fritz!Box-Oberfläche unter <strong>Internet &nbsp;›&nbsp; Online-Zähler</strong>,
           ob die Zählung aktiviert ist. Online-Zeiten werden trotzdem angezeigt.
           <div style={{ marginTop: 10 }}>
@@ -136,7 +138,7 @@ export default function Traffic({ sid }: TrafficProps) {
                     <polyline points="8 17 12 21 16 17" /><line x1="12" y1="3" x2="12" y2="21" />
                   </svg>
                 </div>
-                <h3>Heute Empfangen</h3>
+                <h3>{t('Heute Empfangen')}</h3>
                 <div className="value" style={{ color: '#3b82f6' }}>{fmtBytes(counters[0].received)}</div>
               </div>
               <div className="stat-card">
@@ -145,7 +147,7 @@ export default function Traffic({ sid }: TrafficProps) {
                     <polyline points="16 7 12 3 8 7" /><line x1="12" y1="21" x2="12" y2="3" />
                   </svg>
                 </div>
-                <h3>Heute Gesendet</h3>
+                <h3>{t('Heute Gesendet')}</h3>
                 <div className="value" style={{ color: '#22c55e' }}>{fmtBytes(counters[0].sent)}</div>
               </div>
               <div className="stat-card">
@@ -154,7 +156,7 @@ export default function Traffic({ sid }: TrafficProps) {
                     <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
                   </svg>
                 </div>
-                <h3>Heute Online-Zeit</h3>
+                <h3>{t('Heute Online-Zeit')}</h3>
                 <div className="value" style={{ color: '#f59e0b' }}>{counters[0].onlineTime}</div>
               </div>
               {counters[3] && (
@@ -164,7 +166,7 @@ export default function Traffic({ sid }: TrafficProps) {
                       <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
                     </svg>
                   </div>
-                  <h3>Monat Gesamt</h3>
+                  <h3>{t('Monat Gesamt')}</h3>
                   <div className="value" style={{ color: '#8b5cf6' }}>{fmtBytes(counters[3].received + counters[3].sent)}</div>
                 </div>
               )}
@@ -173,7 +175,7 @@ export default function Traffic({ sid }: TrafficProps) {
 
           <div className="card">
             <div className="card-header">
-              <h3>Online-Z{'\u00e4'}hler</h3>
+              <h3>{t('Online-Z\u00e4hler')}</h3>
               <button
                 onClick={load}
                 style={{
@@ -186,7 +188,7 @@ export default function Traffic({ sid }: TrafficProps) {
                   cursor: 'pointer',
                 }}
               >
-                Aktualisieren
+                {t('Aktualisieren')}
               </button>
             </div>
             <div className="card-body">
@@ -194,12 +196,12 @@ export default function Traffic({ sid }: TrafficProps) {
                 <table>
                   <thead>
                     <tr>
-                      <th>Zeitraum</th>
-                      <th>Online-Zeit</th>
-                      <th>Gesamt</th>
-                      <th style={{ color: '#3b82f6' }}>Empfangen</th>
-                      <th style={{ color: '#22c55e' }}>Gesendet</th>
-                      <th>Verbindungen</th>
+                      <th>{t('Zeitraum')}</th>
+                      <th>{t('Online-Zeit')}</th>
+                      <th>{t('Gesamt')}</th>
+                      <th style={{ color: '#3b82f6' }}>{t('Empfangen')}</th>
+                      <th style={{ color: '#22c55e' }}>{t('Gesendet')}</th>
+                      <th>{t('Verbindungen')}</th>
                     </tr>
                   </thead>
                   <tbody>

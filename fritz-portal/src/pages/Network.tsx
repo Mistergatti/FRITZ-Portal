@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import { useT } from '../lib/i18n';
 
 interface NetworkProps {
   sid: string;
@@ -8,6 +9,7 @@ interface NetworkProps {
 type NetworkTab = 'overview' | 'lan' | 'wan' | 'wlan' | 'dhcp';
 
 export default function Network({ sid }: NetworkProps) {
+  const t = useT();
   const [tab, setTab] = useState<NetworkTab>('overview');
   const [loading, setLoading] = useState(true);
   const [lanInfo, setLanInfo] = useState<any>(null);
@@ -57,18 +59,18 @@ export default function Network({ sid }: NetworkProps) {
   if (loading) return <div className="loading"><div className="spinner" /></div>;
 
   const tabs: { id: NetworkTab; label: string }[] = [
-    { id: 'overview', label: '\u00dcbersicht' },
-    { id: 'lan', label: 'LAN' },
-    { id: 'wan', label: 'WAN' },
-    { id: 'wlan', label: 'WLAN' },
-    { id: 'dhcp', label: 'DHCP' },
+    { id: 'overview', label: t('\u00dcbersicht') },
+    { id: 'lan', label: t('LAN') },
+    { id: 'wan', label: t('WAN') },
+    { id: 'wlan', label: t('WLAN') },
+    { id: 'dhcp', label: t('DHCP') },
   ];
 
   return (
     <div>
       <div className="page-header">
-        <h2>Netzwerk</h2>
-        <p>Netzwerk-Konfiguration und Einstellungen</p>
+        <h2>{t('Netzwerk')}</h2>
+        <p>{t('Netzwerk-Konfiguration und Einstellungen')}</p>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
@@ -105,41 +107,42 @@ function NetworkOverview({ lanInfo, wanInfo, wlanInfo, meshData, meshLoading, si
   lanInfo: any; wanInfo: any; wlanInfo: any[];
   meshData: any; meshLoading: boolean; sid: string;
 }) {
+  const t = useT();
   return (
     <div>
       <div className="stats-grid">
         <div className="card">
-          <div className="card-header"><h3>LAN</h3></div>
+          <div className="card-header"><h3>{t('LAN')}</h3></div>
           <div className="card-body">
             <table><tbody>
-              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 180 }}>Router IP</td><td>{lanInfo?.NewIPRouters || '-'}</td></tr>
-              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Subnetzmaske</td><td>{lanInfo?.NewSubnetMask || '-'}</td></tr>
-              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>DNS-Server</td><td>{lanInfo?.NewDNSServers || '-'}</td></tr>
+              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 180 }}>{t('Router IP')}</td><td>{lanInfo?.NewIPRouters || '-'}</td></tr>
+              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Subnetzmaske')}</td><td>{lanInfo?.NewSubnetMask || '-'}</td></tr>
+              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('DNS-Server')}</td><td>{lanInfo?.NewDNSServers || '-'}</td></tr>
             </tbody></table>
           </div>
         </div>
 
         <div className="card">
-          <div className="card-header"><h3>WAN</h3></div>
+          <div className="card-header"><h3>{t('WAN')}</h3></div>
           <div className="card-body">
             <table><tbody>
-              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 180 }}>Externe IP</td><td>{wanInfo?.NewExternalIPAddress || '-'}</td></tr>
-              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Verbindung</td><td>{wanInfo?.NewConnectionStatus || '-'}</td></tr>
-              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Typ</td><td>{wanInfo?.NewConnectionType || '-'}</td></tr>
+              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 180 }}>{t('Externe IP')}</td><td>{wanInfo?.NewExternalIPAddress || '-'}</td></tr>
+              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Verbindung')}</td><td>{wanInfo?.NewConnectionStatus || '-'}</td></tr>
+              <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Typ')}</td><td>{wanInfo?.NewConnectionType || '-'}</td></tr>
             </tbody></table>
           </div>
         </div>
 
         <div className="card">
-          <div className="card-header"><h3>WLAN Netzwerke</h3></div>
+          <div className="card-header"><h3>{t('WLAN Netzwerke')}</h3></div>
           <div className="card-body">
             {wlanInfo.map((w, i) => (
               <div key={i} style={{ marginBottom: i < wlanInfo.length - 1 ? 16 : 0, paddingBottom: i < wlanInfo.length - 1 ? 16 : 0, borderBottom: i < wlanInfo.length - 1 ? '1px solid var(--border)' : 'none' }}>
                 <div style={{ fontWeight: 500, marginBottom: 4 }}>{w.NewSSID || `WLAN ${i + 1}`}</div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Kanal: {w.NewChannel || '-'} | Status: {w.NewStatus || '-'}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t('Kanal')}: {w.NewChannel || '-'} | {t('Status')}: {w.NewStatus || '-'}</div>
               </div>
             ))}
-            {wlanInfo.length === 0 && <div style={{ color: 'var(--text-secondary)' }}>Keine WLAN-Daten verfügbar</div>}
+            {wlanInfo.length === 0 && <div style={{ color: 'var(--text-secondary)' }}>{t('Keine WLAN-Daten verfügbar')}</div>}
           </div>
         </div>
       </div>
@@ -183,6 +186,7 @@ const isInfraDevice = (name: string) => {
 };
 
 function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: boolean; sid: string }) {
+  const t = useT();
   const [tooltip, setTooltip] = useState<{ node: MeshNode; x: number; y: number } | null>(null);
   const [hoveredUid, setHoveredUid] = useState<string | null>(null);
   const [showNames, setShowNames] = useState(false);
@@ -234,35 +238,35 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
         background: viewMode === 'mesh' ? 'var(--accent)' : 'transparent',
         color: viewMode === 'mesh' ? '#fff' : 'var(--text-secondary)',
         transition: 'all 0.2s',
-      }}>Mesh</button>
+      }}>{t('Mesh')}</button>
       <button onClick={() => { setViewMode('hosts'); if (!hostsData && !isOriginallyHosts) fetchHosts(); }} style={{
         padding: '4px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
         background: viewMode === 'hosts' ? 'var(--accent)' : 'transparent',
         color: viewMode === 'hosts' ? '#fff' : 'var(--text-secondary)',
         transition: 'all 0.2s',
-      }}>Netzwerk</button>
+      }}>{t('Netzwerk')}</button>
     </div>
   );
 
   const legendDot = (color: string) => ({ width: 12, height: 10, borderRadius: 3, background: color, display: 'inline-block' });
   const legend = showHostsView ? (
     <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#06b6d4')} /> Fritz!Box</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#3b82f6')} /> LAN</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#10b981')} /> WLAN</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#f59e0b')} /> Infrastruktur</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#06b6d4')} /> {t('Fritz!Box')}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#3b82f6')} /> {t('LAN')}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#10b981')} /> {t('WLAN')}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#f59e0b')} /> {t('Infrastruktur')}</span>
     </div>
   ) : (
     <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#06b6d4')} /> Master</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#f59e0b')} /> Infrastruktur</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#3b82f6')} /> LAN-Client</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#10b981')} /> WLAN-Client</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#06b6d4')} /> {t('Master')}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#f59e0b')} /> {t('Infrastruktur')}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#3b82f6')} /> {t('LAN-Client')}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#10b981')} /> {t('WLAN-Client')}</span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#3b82f6" strokeWidth="2" /></svg> LAN
+        <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#3b82f6" strokeWidth="2" /></svg> {t('LAN')}
       </span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#10b981" strokeWidth="2" strokeDasharray="6 3" /></svg> WLAN
+        <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#10b981" strokeWidth="2" strokeDasharray="6 3" /></svg> {t('WLAN')}
       </span>
     </div>
   );
@@ -271,7 +275,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
     return (
       <div className="card">
         <div className="card-header" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h3>Netzwerk-Topologie</h3>{toggleBtn}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h3>{t('Netzwerk-Topologie')}</h3>{toggleBtn}</div>
           {legend}
         </div>
         <div className="card-body" style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" /></div>
@@ -283,7 +287,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
     return (
       <div className="card">
         <div className="card-header" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h3>Netzwerk-Topologie</h3>{toggleBtn}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h3>{t('Netzwerk-Topologie')}</h3>{toggleBtn}</div>
           {legend}
         </div>
         <div className="card-body" style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>
@@ -292,12 +296,12 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
             <line x1="12" y1="7" x2="5" y2="17" /><line x1="12" y1="7" x2="19" y2="17" />
           </svg>
           <div style={{ fontWeight: 500, marginBottom: 4 }}>
-            {viewMode === 'mesh' ? 'Keine Mesh-Daten verfügbar' : 'Keine Netzwerk-Daten verfügbar'}
+            {viewMode === 'mesh' ? t('Keine Mesh-Daten verfügbar') : t('Keine Netzwerk-Daten verfügbar')}
           </div>
           <div style={{ fontSize: 13 }}>
             {viewMode === 'mesh'
-              ? 'Dieses Modell unterstützt möglicherweise kein Mesh. Wechsle zur Netzwerk-Ansicht.'
-              : 'Die Geräteliste konnte nicht abgerufen werden.'}
+              ? t('Dieses Modell unterstützt möglicherweise kein Mesh. Wechsle zur Netzwerk-Ansicht.')
+              : t('Die Geräteliste konnte nicht abgerufen werden.')}
           </div>
         </div>
       </div>
@@ -318,12 +322,12 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
     }}>
       <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 14 }}>{tooltip.node.name}</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px' }}>
-        <span style={{ color: 'var(--text-secondary)' }}>Rolle</span>
-        <span style={{ color: roleMeta(tooltip.node).color }}>{roleMeta(tooltip.node).label}</span>
-        {tooltip.node.mac && <><span style={{ color: 'var(--text-secondary)' }}>MAC</span><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{tooltip.node.mac}</span></>}
-        {tooltip.node.ip && <><span style={{ color: 'var(--text-secondary)' }}>IP</span><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{tooltip.node.ip}</span></>}
-        {tooltip.node.model && <><span style={{ color: 'var(--text-secondary)' }}>Modell</span><span>{tooltip.node.model}</span></>}
-        {tooltip.node.interfaces?.[0]?.type && <><span style={{ color: 'var(--text-secondary)' }}>Verbindung</span><span>{isWlanType(tooltip.node.interfaces[0].type) ? 'WLAN' : 'LAN'}</span></>}
+        <span style={{ color: 'var(--text-secondary)' }}>{t('Rolle')}</span>
+        <span style={{ color: roleMeta(tooltip.node).color }}>{t(roleMeta(tooltip.node).label)}</span>
+        {tooltip.node.mac && <><span style={{ color: 'var(--text-secondary)' }}>{t('MAC')}</span><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{tooltip.node.mac}</span></>}
+        {tooltip.node.ip && <><span style={{ color: 'var(--text-secondary)' }}>{t('IP')}</span><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{tooltip.node.ip}</span></>}
+        {tooltip.node.model && <><span style={{ color: 'var(--text-secondary)' }}>{t('Modell')}</span><span>{tooltip.node.model}</span></>}
+        {tooltip.node.interfaces?.[0]?.type && <><span style={{ color: 'var(--text-secondary)' }}>{t('Verbindung')}</span><span>{isWlanType(tooltip.node.interfaces[0].type) ? t('WLAN') : t('LAN')}</span></>}
       </div>
     </div>
   );
@@ -383,21 +387,21 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
     return (
       <div className="card">
         <div className="card-header" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h3>Netzwerk-Topologie</h3>{toggleBtn}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h3>{t('Netzwerk-Topologie')}</h3>{toggleBtn}</div>
           {legend}
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 24, padding: '12px 16px 0', fontSize: 13, color: 'var(--text-secondary)' }}>
-          <span>{totalClients} Geräte online</span>
-          <span style={{ color: '#3b82f6' }}>● {lanCount} LAN</span>
-          <span style={{ color: '#10b981' }}>● {wlanCount} WLAN</span>
-          {infraCount > 0 && <span style={{ color: '#f59e0b' }}>● {infraCount} Infrastruktur</span>}
+          <span>{t('{n} Geräte online').replace('{n}', String(totalClients))}</span>
+          <span style={{ color: '#3b82f6' }}>● {t('{n} LAN').replace('{n}', String(lanCount))}</span>
+          <span style={{ color: '#10b981' }}>● {t('{n} WLAN').replace('{n}', String(wlanCount))}</span>
+          {infraCount > 0 && <span style={{ color: '#f59e0b' }}>● {t('{n} Infrastruktur').replace('{n}', String(infraCount))}</span>}
           <button onClick={() => setShowNames(v => !v)} style={{
             marginLeft: 8, padding: '2px 10px', fontSize: 12, borderRadius: 6,
             border: '1px solid var(--border)', cursor: 'pointer',
             background: showNames ? 'var(--accent)' : 'var(--bg-card)',
             color: showNames ? '#fff' : 'var(--text-secondary)',
             transition: 'all 0.2s',
-          }}>{showNames ? 'Namen ✓' : 'Namen'}</button>
+          }}>{showNames ? t('Namen ✓') : t('Namen')}</button>
         </div>
         <div className="card-body" style={{ padding: 0, position: 'relative', overflowX: 'auto' }}
              onMouseLeave={() => { setTooltip(null); setHoveredUid(null); }}>
@@ -597,13 +601,13 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
   return (
     <div className="card">
       <div className="card-header" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h3>Mesh-Topologie</h3>{toggleBtn}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h3>{t('Mesh-Topologie')}</h3>{toggleBtn}</div>
         {legend}
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 24, padding: '10px 16px 2px', fontSize: 13, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-        <span>{flat.length} Geräte</span>
-        {infraCount > 0 && <span style={{ color: '#f59e0b' }}>● {infraCount} Infrastruktur</span>}
-        <span style={{ color: 'var(--text-primary)' }}>● {clientCount} Clients</span>
+        <span>{t('{n} Geräte').replace('{n}', String(flat.length))}</span>
+        {infraCount > 0 && <span style={{ color: '#f59e0b' }}>● {t('{n} Infrastruktur').replace('{n}', String(infraCount))}</span>}
+        <span style={{ color: 'var(--text-primary)' }}>● {t('{n} Clients').replace('{n}', String(clientCount))}</span>
       </div>
       <div className="card-body" style={{ padding: 0, position: 'relative', overflow: 'auto' }}
            onMouseLeave={() => { setTooltip(null); setHoveredUid(null); }}>
@@ -715,16 +719,17 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
 }
 
 function LANSettings({ lanInfo }: { lanInfo: any }) {
+  const t = useT();
   return (
     <div className="card">
-      <div className="card-header"><h3>LAN Einstellungen</h3></div>
+      <div className="card-header"><h3>{t('LAN Einstellungen')}</h3></div>
       <div className="card-body">
         <table>
           <tbody>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 220 }}>IP-Adresse (Router)</td><td>{lanInfo?.NewIPRouters || '-'}</td></tr>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Subnetzmaske</td><td>{lanInfo?.NewSubnetMask || '-'}</td></tr>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>DNS-Server</td><td>{lanInfo?.NewDNSServers || '-'}</td></tr>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Domainname</td><td>{lanInfo?.NewDomainName || '-'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 220 }}>{t('IP-Adresse (Router)')}</td><td>{lanInfo?.NewIPRouters || '-'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Subnetzmaske')}</td><td>{lanInfo?.NewSubnetMask || '-'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('DNS-Server')}</td><td>{lanInfo?.NewDNSServers || '-'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Domainname')}</td><td>{lanInfo?.NewDomainName || '-'}</td></tr>
           </tbody>
         </table>
       </div>
@@ -733,17 +738,18 @@ function LANSettings({ lanInfo }: { lanInfo: any }) {
 }
 
 function WANSettings({ wanInfo }: { wanInfo: any }) {
+  const t = useT();
   return (
     <div className="card">
-      <div className="card-header"><h3>WAN Einstellungen</h3></div>
+      <div className="card-header"><h3>{t('WAN Einstellungen')}</h3></div>
       <div className="card-body">
         <table>
           <tbody>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 220 }}>Externe IP-Adresse</td><td>{wanInfo?.NewExternalIPAddress || '-'}</td></tr>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Verbindungsstatus</td><td>{wanInfo?.NewConnectionStatus || '-'}</td></tr>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Verbindungstyp</td><td>{wanInfo?.NewConnectionType || '-'}</td></tr>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Upstream</td><td>{wanInfo?.NewUpstreamMaxBitRate || '-'}</td></tr>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Downstream</td><td>{wanInfo?.NewDownstreamMaxBitRate || '-'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 220 }}>{t('Externe IP-Adresse')}</td><td>{wanInfo?.NewExternalIPAddress || '-'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Verbindungsstatus')}</td><td>{wanInfo?.NewConnectionStatus || '-'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Verbindungstyp')}</td><td>{wanInfo?.NewConnectionType || '-'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Upstream')}</td><td>{wanInfo?.NewUpstreamMaxBitRate || '-'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Downstream')}</td><td>{wanInfo?.NewDownstreamMaxBitRate || '-'}</td></tr>
           </tbody>
         </table>
       </div>
@@ -752,6 +758,7 @@ function WANSettings({ wanInfo }: { wanInfo: any }) {
 }
 
 function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
+  const t = useT();
   const bandLabels = ['2.4 GHz', '5 GHz', '6 GHz / Gast'];
   const bandColors = ['#3b82f6', '#22c55e', '#f59e0b'];
   const bandBg = ['rgba(59,130,246,0.1)', 'rgba(34,197,94,0.1)', 'rgba(245,158,11,0.1)'];
@@ -763,7 +770,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
   const [messages, setMessages] = useState<Record<number, string>>({});
 
   const getSecurity = (standard: string) => {
-    if (!standard) return 'Keine';
+    if (!standard) return t('Keine');
     if (standard.includes('WPA3')) return 'WPA3';
     if (standard.includes('WPA2')) return 'WPA2';
     if (standard.includes('WPA')) return 'WPA';
@@ -783,7 +790,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
   const handleSavePass = async (wlanIndex: number) => {
     const newPass = editPass[wlanIndex];
     if (!newPass || newPass.length < 8) {
-      setMessages(m => ({ ...m, [wlanIndex]: 'Fehler: Mindestens 8 Zeichen erforderlich' }));
+      setMessages(m => ({ ...m, [wlanIndex]: t('Fehler: Mindestens 8 Zeichen erforderlich') }));
       return;
     }
     setSaving(s => ({ ...s, [wlanIndex]: true }));
@@ -796,13 +803,13 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
       });
       const data = await res.json();
       if (data.success) {
-        setMessages(m => ({ ...m, [wlanIndex]: 'Passwort gespeichert' }));
+        setMessages(m => ({ ...m, [wlanIndex]: t('Passwort gespeichert') }));
         setEditPass(e => ({ ...e, [wlanIndex]: '' }));
       } else {
-        setMessages(m => ({ ...m, [wlanIndex]: `Fehler: ${data.error || 'Unbekannt'}` }));
+        setMessages(m => ({ ...m, [wlanIndex]: t('Fehler: {e}').replace('{e}', data.error || t('Unbekannt')) }));
       }
     } catch {
-      setMessages(m => ({ ...m, [wlanIndex]: 'Verbindungsfehler' }));
+      setMessages(m => ({ ...m, [wlanIndex]: t('Verbindungsfehler') }));
     } finally {
       setSaving(s => ({ ...s, [wlanIndex]: false }));
     }
@@ -843,30 +850,30 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
                   fontSize: 13,
                   fontWeight: 600,
                 }}>
-                  {isEnabled ? 'Aktiv' : 'Inaktiv'}
+                  {isEnabled ? t('Aktiv') : t('Inaktiv')}
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 20 }}>
                 <div style={{ background: bg, borderRadius: 10, padding: 16 }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Kanal</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{t('Kanal')}</div>
                   <div style={{ fontSize: 24, fontWeight: 700, color }}>{w.NewChannel || '-'}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{freq}</div>
                 </div>
                 <div style={{ background: bg, borderRadius: 10, padding: 16 }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Standard</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{t('Standard')}</div>
                   <div style={{ fontSize: 24, fontWeight: 700, color }}>{w.NewStandard || '-'}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{getSecurity(w.NewStandard || '')}</div>
                 </div>
                 <div style={{ background: bg, borderRadius: 10, padding: 16 }}>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Verschl\u00fcsselung</div>
                   <div style={{ fontSize: 20, fontWeight: 700, color }}>{getSecurity(w.NewStandard || '')}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{isEnabled ? 'Gesichert' : '-'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{isEnabled ? t('Gesichert') : '-'}</div>
                 </div>
                 <div style={{ background: bg, borderRadius: 10, padding: 16 }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Status</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{t('Status')}</div>
                   <div style={{ fontSize: 20, fontWeight: 700, color: isEnabled ? '#22c55e' : '#ef4444' }}>
-                    {isEnabled ? 'Verbunden' : 'Getrennt'}
+                    {isEnabled ? t('Verbunden') : t('Getrennt')}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{w.NewStatus || '-'}</div>
                 </div>
@@ -874,12 +881,12 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
 
               {/* WLAN-Passwort */}
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text-secondary)' }}>WLAN-Passwort (WPA-Schl\u00fcssel)</div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text-secondary)' }}>{t('WLAN-Passwort (WPA-Schl\u00fcssel)')}</div>
 
                 {/* Aktuelles Passwort anzeigen */}
                 {w.NewKeyPassphrase && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', width: 100 }}>Aktuell:</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', width: 100 }}>{t('Aktuell:')}</span>
                     <code style={{
                       background: 'var(--bg-primary)',
                       border: '1px solid var(--border)',
@@ -899,22 +906,22 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
                         color: 'var(--text-secondary)',
                       }}
                     >
-                      {showPass[wlanIdx] ? 'Verbergen' : 'Anzeigen'}
+                      {showPass[wlanIdx] ? t('Verbergen') : t('Anzeigen')}
                     </button>
                   </div>
                 )}
                 {!w.NewKeyPassphrase && (
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>Kein Passwort verf\u00fcgbar (Ger\u00e4t offline oder kein Zugriff)</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>{t('Kein Passwort verf\u00fcgbar (Ger\u00e4t offline oder kein Zugriff)')}</div>
                 )}
 
                 {/* Neues Passwort setzen */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', width: 100 }}>Neu setzen:</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', width: 100 }}>{t('Neu setzen:')}</span>
                   <input
                     type="text"
                     value={editPass[wlanIdx] || ''}
                     onChange={e => setEditPass(ep => ({ ...ep, [wlanIdx]: e.target.value }))}
-                    placeholder="Neues Passwort (min. 8 Zeichen)"
+                    placeholder={t('Neues Passwort (min. 8 Zeichen)')}
                     style={{
                       padding: '6px 10px', borderRadius: 6,
                       border: '1px solid var(--border)',
@@ -928,7 +935,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
                     disabled={saving[wlanIdx] || !editPass[wlanIdx] || (editPass[wlanIdx]?.length || 0) < 8}
                     style={{ padding: '6px 14px', fontSize: 13 }}
                   >
-                    {saving[wlanIdx] ? '...' : 'Speichern'}
+                    {saving[wlanIdx] ? '...' : t('Speichern')}
                   </button>
                 </div>
                 {messages[wlanIdx] && (
@@ -948,7 +955,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
       {wlanInfo.length === 0 && (
         <div className="card">
           <div className="card-body">
-            <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 32 }}>Keine WLAN-Daten verf\u00fcgbar</div>
+            <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 32 }}>{t('Keine WLAN-Daten verf\u00fcgbar')}</div>
           </div>
         </div>
       )}
@@ -957,6 +964,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
 }
 
 function DHCPSettings({ dhcpInfo, sid }: { dhcpInfo: any; sid: string }) {
+  const t = useT();
   const [minAddress, setMinAddress] = useState(dhcpInfo?.NewMinAddress || '');
   const [maxAddress, setMaxAddress] = useState(dhcpInfo?.NewMaxAddress || '');
   const [subnetMask, setSubnetMask] = useState(dhcpInfo?.NewSubnetMask || '');
@@ -987,12 +995,12 @@ function DHCPSettings({ dhcpInfo, sid }: { dhcpInfo: any; sid: string }) {
       });
       const data = await res.json();
       if (data.success) {
-        setMessage('DHCP-Einstellungen gespeichert');
+        setMessage(t('DHCP-Einstellungen gespeichert'));
       } else {
-        setError(data.error || 'Speichern fehlgeschlagen');
+        setError(data.error || t('Speichern fehlgeschlagen'));
       }
     } catch (err) {
-      setError('Verbindungsfehler');
+      setError(t('Verbindungsfehler'));
     } finally {
       setSaving(false);
     }
@@ -1002,35 +1010,35 @@ function DHCPSettings({ dhcpInfo, sid }: { dhcpInfo: any; sid: string }) {
 
   return (
     <div className="card">
-      <div className="card-header"><h3>DHCP Einstellungen</h3></div>
+      <div className="card-header"><h3>{t('DHCP Einstellungen')}</h3></div>
       <div className="card-body">
         {message && <div className="success-message">{message}</div>}
         {error && <div className="error-message">{error}</div>}
         <table>
           <tbody>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 220 }}>DHCP Server</td><td>{dhcpInfo?.NewDHCPServerConfigurable === '1' ? 'Aktiv' : 'Inaktiv'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)', width: 220 }}>{t('DHCP Server')}</td><td>{dhcpInfo?.NewDHCPServerConfigurable === '1' ? t('Aktiv') : t('Inaktiv')}</td></tr>
             <tr>
-              <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>IP-Bereich Start</td>
+              <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('IP-Bereich Start')}</td>
               <td><input type="text" value={minAddress} onChange={e => setMinAddress(e.target.value)} style={inputStyle} /></td>
             </tr>
             <tr>
-              <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>IP-Bereich Ende</td>
+              <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('IP-Bereich Ende')}</td>
               <td><input type="text" value={maxAddress} onChange={e => setMaxAddress(e.target.value)} style={inputStyle} /></td>
             </tr>
             <tr>
-              <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Subnetzmaske</td>
+              <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Subnetzmaske')}</td>
               <td><input type="text" value={subnetMask} onChange={e => setSubnetMask(e.target.value)} style={inputStyle} /></td>
             </tr>
-            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Router (Gateway)</td><td>{dhcpInfo?.NewIPRouters || '-'}</td></tr>
+            <tr><td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('Router (Gateway)')}</td><td>{dhcpInfo?.NewIPRouters || '-'}</td></tr>
             <tr>
-              <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>DNS-Server</td>
+              <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{t('DNS-Server')}</td>
               <td><input type="text" value={dnsServers} onChange={e => setDnsServers(e.target.value)} style={inputStyle} placeholder="z.B. 192.168.178.1" /></td>
             </tr>
           </tbody>
         </table>
         <div style={{ marginTop: 16 }}>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Speichern...' : 'Einstellungen speichern'}
+            {saving ? t('Speichern...') : t('Einstellungen speichern')}
           </button>
         </div>
       </div>

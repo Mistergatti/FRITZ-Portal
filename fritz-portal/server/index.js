@@ -21,32 +21,43 @@ function debugLog(...args) {
   if (debugLogging) console.log('[DEBUG]', ...args);
 }
 
-// ── Rate-Limiter: max. 3 gleichzeitige data.lua Anfragen + 300ms Mindestabstand ──
-// Verhindert Session-Spam auf der Fritz!Box und stabilisiert UI + SmartHome (BUG-01/02)
-{
-  const _origFetch = globalThis.fetch;
-  let _inflight = 0;
-  let _lastCallMs = 0;
-  globalThis.fetch = async function patchedFetch(url, opts) {
-    const urlStr = typeof url === 'string' ? url : (url?.href ?? String(url ?? ''));
-    if (urlStr.includes('/data.lua')) {
-      while (_inflight >= 3) await new Promise(r => setTimeout(r, 60));
-      const gap = 300 - (Date.now() - _lastCallMs);
-      if (gap > 0) await new Promise(r => setTimeout(r, gap));
-      _lastCallMs = Date.now();
-      _inflight++;
-      debugLog(`data.lua \u2191 (${_inflight} aktiv)`);
-      try {
-        return await _origFetch(url, opts);
-      } finally {
-        _inflight--;
-        debugLog(`data.lua \u2193 (${_inflight} aktiv)`);
-      }
-    }
-    if (debugLogging && urlStr.includes(':49000')) debugLog(`SOAP: ${urlStr.split('?')[0]}`);
-    return _origFetch(url, opts);
-  };
+// ── Rate-Limiter: data.lua max. 2 parallel + 400ms Mindestabstand, SOAP (:49000)
+//    max. 6 parallel. Verhindert Session-Spam auf der Fritz!Box und stabilisiert die
+//    parallele Nutzung mit der Fritz-SmartHome-Integration in HA (BUG-01/02).
+// acquireDataLuaSlot() gibt einen Release-Callback zur\u00fcck \u2013 Endpunkte mit eigenem
+// Timeout (z.B. Mesh) holen erst den Slot und starten *dann* ihren Timer, damit die
+// Queue-Wartezeit nicht vom Timeout-Budget abgezogen wird.
+const _origFetch = globalThis.fetch;
+let _dataInflight = 0;
+let _dataLastMs = 0;
+let _soapInflight = 0;
+async function acquireDataLuaSlot() {
+  while (_dataInflight >= 2) await new Promise(r => setTimeout(r, 60));
+  const gap = 400 - (Date.now() - _dataLastMs);
+  if (gap > 0) await new Promise(r => setTimeout(r, gap));
+  _dataLastMs = Date.now();
+  _dataInflight++;
+  debugLog(`data.lua \u2191 (${_dataInflight} aktiv)`);
+  return () => { _dataInflight--; debugLog(`data.lua \u2193 (${_dataInflight} aktiv)`); };
 }
+async function acquireSoapSlot() {
+  while (_soapInflight >= 6) await new Promise(r => setTimeout(r, 40));
+  _soapInflight++;
+  return () => { _soapInflight--; };
+}
+globalThis.fetch = async function patchedFetch(url, opts) {
+  const urlStr = typeof url === 'string' ? url : (url?.href ?? String(url ?? ''));
+  if (urlStr.includes('/data.lua')) {
+    const release = await acquireDataLuaSlot();
+    try { return await _origFetch(url, opts); } finally { release(); }
+  }
+  if (urlStr.includes(':49000')) {
+    const release = await acquireSoapSlot();
+    if (debugLogging) debugLog(`SOAP: ${urlStr.split('?')[0]}`);
+    try { return await _origFetch(url, opts); } finally { release(); }
+  }
+  return _origFetch(url, opts);
+};
 
 // ── HA Add-on: Zugangsdaten aus /data/options.json lesen (überschreibt Env-Vars nicht) ──
 try {
@@ -250,6 +261,9 @@ setInterval(async () => {
   }
 }, 15000);
 
+// Hinweis: Die TTL wird beim *Read* übergeben (nicht beim Write). setCached's drittes
+// Argument wird hier ignoriert. Wer einen Eintrag länger als CACHE_TTL halten will,
+// muss `getCached(key, gewünschteTtl)` aufrufen.
 function getCached(key, ttl = CACHE_TTL) {
   const entry = cache.get(key);
   if (entry && Date.now() - entry.ts < ttl) return entry.data;
@@ -411,6 +425,31 @@ async function getWebSid(host, username, password) {
 }
 
 // ── AHA-HTTP: Geräteliste als XML parsen (SmartHome / DECT Smart Devices) ──
+// SmartHome-Geräteliste deduplizieren. AVM exportiert manche Geräte (z. B. RolloTron
+// DECT) als zwei Einträge mit gleicher AIN: Hauptgerät plus virtuelles Sub-Device für
+// einzelne Funktionen. Ohne Dedup erscheint der Rolladen doppelt im Frontend.
+function dedupSmartHomeDevices(devices) {
+  if (!Array.isArray(devices) || devices.length === 0) return devices;
+  const byKey = new Map();
+  for (const d of devices) {
+    const key = String(d.identifier || d.ain || d.id || d.name || '').replace(/\s+/g, '').toLowerCase();
+    if (!key) continue;
+    const existing = byKey.get(key);
+    if (!existing) { byKey.set(key, d); continue; }
+    // Bei Mehrfachvorkommen: Felder beider Einträge mergen, höchstes functionbitmask
+    // gewinnt – das deckt am meisten Funktionen ab.
+    const merged = { ...existing };
+    for (const [k, v] of Object.entries(d)) {
+      if (merged[k] === undefined || merged[k] === '' || merged[k] === 0) merged[k] = v;
+    }
+    const existingMask = parseInt(existing.functionbitmask || '0', 10) || 0;
+    const newMask      = parseInt(d.functionbitmask        || '0', 10) || 0;
+    merged.functionbitmask = Math.max(existingMask, newMask);
+    byKey.set(key, merged);
+  }
+  return Array.from(byKey.values());
+}
+
 function parseAhaDeviceList(xml) {
   const devices = [];
   const deviceRegex = /<device\s([^>]*)>([\s\S]*?)<\/device>/g;
@@ -449,14 +488,16 @@ function parseAhaDeviceList(xml) {
     }
     devices.push(device);
   }
-  return devices;
+  return dedupSmartHomeDevices(devices);
 }
 
 async function getHostsViaSoap(host, username, password, controlUrls) {
   const countRes = await soapRequest(host, 'urn:dslforum-org:service:Hosts:1', 'GetHostNumberOfEntries', username, password, controlUrls);
   const count = parseInt(countRes?.NewHostNumberOfEntries || '0', 10) || 0;
-  // Alle Hosts parallel abrufen (statt sequentiell) – deutlich schneller bei >10 Geräten
-  const BATCH = 15; // max. gleichzeitige Requests
+  // Alle Hosts parallel abrufen (statt sequentiell) – deutlich schneller bei >10 Geräten.
+  // BATCH von 15 auf 8 gesenkt, um die Fritz!Box nicht mit Bursts zu überfordern und die
+  // parallele Nutzung mit der Fritz-SmartHome-Integration in HA zu erleichtern.
+  const BATCH = 8; // max. gleichzeitige Requests
   const hosts = [];
   for (let i = 0; i < count; i += BATCH) {
     const indices = Array.from({ length: Math.min(BATCH, count - i) }, (_, j) => i + j);
@@ -524,6 +565,74 @@ async function fetchNetDevMap(session) {
     setCached('netdev-map', empty, 5000);
     return empty;
   }
+}
+
+// Liste der MAC-Adressen mit statischer DHCP-Reservierung. TR-064
+// `NewAddressSource` lügt auf vielen Boxen ("DHCP" trotz Reservierung), und einige
+// Firmwares (insbesondere 7530) liefern auch im netDev-Map keine zuverlässigen
+// `static_dhcp`-Felder. Deshalb hier eine eigene Quelle als Vereinigung mit den
+// netDev-Heuristiken in /api/fritz/hosts.
+async function fetchStaticDhcpMacs(session) {
+  const cached = getCached('static-dhcp-macs', 15000);
+  if (cached) return cached;
+  const macs = new Set();
+  const addMac = (raw) => {
+    if (!raw) return;
+    const m = String(raw).replace(/-/g, ':').toLowerCase();
+    if (/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/.test(m)) macs.add(m);
+  };
+  const webSid = await getCachedWebSid(session);
+  // Quelle 1 (data.lua): netSet / lanExpert listen die in der Fritz-UI sichtbaren
+  // Reservierungen. Schema variiert pro Firmware – breit suchen.
+  if (webSid) {
+    for (const page of ['netSet', 'lanExpert', 'home']) {
+      try {
+        const params = new URLSearchParams({ xhr: '1', sid: webSid, lang: 'de', page, xhrId: 'all' });
+        const r = await fetch(`http://${session.host}/data.lua`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString(),
+        });
+        const text = await r.text();
+        if (!text.trim().startsWith('{')) continue;
+        const d = JSON.parse(text)?.data || {};
+        const candidates = [
+          d.dhcp_reservations, d.dhcpReservations, d.staticDhcp, d.static_dhcp_list,
+          d.reservations, d.dhcp?.reservations, d.lan?.reservations, d.devices,
+        ];
+        for (const list of candidates) {
+          if (!Array.isArray(list)) continue;
+          for (const e of list) {
+            const isStatic =
+              e.static_dhcp === true || e.static_dhcp === 1 || e.static_dhcp === '1' ||
+              e.is_static === true || e.fixed === true || e.fixedip === true ||
+              e.dhcp_static === true || (typeof e.dhcp === 'string' && e.dhcp === '2') ||
+              e.ipv4?.static_dhcp === true || e.ipv4?.static_dhcp === 1 || e.ipv4?.static_dhcp === '1';
+            if (isStatic) addMac(e.mac || e.macAddress || e.mac_address);
+          }
+        }
+      } catch {}
+      if (macs.size > 0) break;
+    }
+  }
+  // Quelle 2 (SOAP): generischer Loop über GetGenericLANHostStaticDHCPEntry, falls
+  // data.lua keine Reservierungen geliefert hat. Wenig elegant, aber zuverlässig.
+  if (macs.size === 0) {
+    try {
+      for (let i = 0; i < 200; i++) {
+        try {
+          const e = await soapRequest(session.host, 'urn:dslforum-org:service:LANHostConfigManagement:1', 'GetGenericLANHostStaticDHCPEntry', session.username, session.password, session.controlUrls, { NewIndex: String(i) });
+          const enabled = e?.NewEnabled === '1' || e?.NewEnabled === 'true' || e?.NewEnabled === true;
+          if (enabled) addMac(e.NewMACAddress);
+        } catch (err) {
+          if (String(err?.message || '').includes('SpecifiedArrayIndexInvalid')) break;
+          break; // andere Fehler ⇒ Endpoint nicht verfügbar, raus
+        }
+      }
+    } catch {}
+  }
+  setCached('static-dhcp-macs', macs);
+  return macs;
 }
 
 // Gemeinsame WLAN-Erkennung – muss mit der in normalizeMeshDevices übereinstimmen,
@@ -683,31 +792,38 @@ app.get('/api/fritz/hosts', async (req, res) => {
   const cached = getCached('hosts', 60000); // Hosts 60s cachen – ändert sich selten
   if (cached) return res.json(cached);
   try {
-    // SOAP-Hostliste + netDev parallel holen. netDev liefert die bessere WLAN/LAN-
-    // Klassifizierung und die Port-/Geschwindigkeitsdetails, die die Fritz-UI anzeigt.
-    const [hosts, netDevMap] = await Promise.all([
+    // SOAP-Hostliste + netDev + DHCP-Reservierungen parallel holen. netDev liefert
+    // bessere WLAN/LAN-Klassifizierung und Port-/Geschwindigkeitsdetails; die
+    // Reservierungs-Liste füllt die Lücke, wenn netDev kein static_dhcp-Flag liefert
+    // (insbesondere 7530-Firmware).
+    const [hosts, netDevMap, staticMacs] = await Promise.all([
       getHostsViaSoap(session.host, session.username, session.password, session.controlUrls),
       fetchNetDevMap(session),
+      fetchStaticDhcpMacs(session),
     ]);
     for (const h of hosts) {
       const dev = netDevMap.get(h.mac);
-      if (!dev) continue;
-      const conn = formatConnDetail(dev);
-      // interface-Feld so setzen, dass der Frontend-isWlan()-Check korrekt greift
-      h.interface = conn.type === 'WLAN' ? '802.11' : 'Ethernet';
-      h.connType = conn.type;       // 'LAN' | 'WLAN'
-      h.connDetail = conn.detail;   // '2' / '2,4 GHz' / '5 GHz' …
-      h.connSpeed = conn.speed;     // '1 Gbit/s' / '58 Mbit/s' …
-      h.connDisplay = conn.display; // 'LAN 2 → 1 Gbit/s'
-      // Feste IP aus netDev ableiten – TR-064 NewAddressSource meldet auf vielen Boxen
-      // weiterhin "DHCP" obwohl eine statische Reservierung vorliegt. netDev kennt das
-      // Flag dagegen zuverlässig über `static_dhcp` oder `ipv4.static_dhcp`.
-      const isStatic =
+      if (dev) {
+        const conn = formatConnDetail(dev);
+        // interface-Feld so setzen, dass der Frontend-isWlan()-Check korrekt greift
+        h.interface = conn.type === 'WLAN' ? '802.11' : 'Ethernet';
+        h.connType = conn.type;       // 'LAN' | 'WLAN'
+        h.connDetail = conn.detail;   // '2' / '2,4 GHz' / '5 GHz' …
+        h.connSpeed = conn.speed;     // '1 Gbit/s' / '58 Mbit/s' …
+        h.connDisplay = conn.display; // 'LAN 2 → 1 Gbit/s'
+      }
+      // Feste IP über die Vereinigung mehrerer Quellen ableiten:
+      //  - netDev-Felder (best-effort, Firmware-abhängig)
+      //  - explizite DHCP-Reservierungs-Liste (data.lua netSet bzw. SOAP)
+      const fromNetDev = dev && (
         dev.static_dhcp === true || dev.static_dhcp === 1 || dev.static_dhcp === '1' ||
         dev.ipv4?.static_dhcp === true || dev.ipv4?.static_dhcp === 1 || dev.ipv4?.static_dhcp === '1' ||
-        dev.is_static === true ||
-        (typeof dev.dhcp === 'string' && dev.dhcp === '2');
-      if (isStatic) h.addressSource = 'Static';
+        dev.dhcp_static === true || dev.dhcp_static === 1 || dev.dhcp_static === '1' ||
+        dev.is_static === true || dev.fixed === true || dev.fixedip === true ||
+        (typeof dev.dhcp === 'string' && dev.dhcp === '2')
+      );
+      const fromList = staticMacs.has(h.mac);
+      if (fromNetDev || fromList) h.addressSource = 'Static';
     }
     setCached('hosts', hosts);
     return res.json(hosts);
@@ -721,11 +837,28 @@ app.get('/api/fritz/eco-stats', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   const session = sessions.get(sid);
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
-  const cached = getCached('eco-stats');
+  // Längere TTL als der CACHE_TTL-Default (10 s): Der Background-Collector tickt alle
+  // 15 s; mit 30 s deckt jeder eingehende Request einen Tick ab und der On-Demand-Pfad
+  // wird zur reinen Notlösung, falls der Collector noch nie gelaufen ist.
+  const cached = getCached('eco-stats', 30000);
   if (cached) return res.json(cached);
+  // Letzter Strohhalm: wenn der On-Demand-Pfad gleich 0/0/0 zurückgeben würde,
+  // bevorzugen wir den jüngsten Eintrag aus dem ecoHistory-Buffer (wird vom
+  // Collector gefüllt, der zuverlässiger arbeitet als der On-Demand-Pfad).
+  const lastFromHistory = () => {
+    const cpuPt  = ecoHistory.cpu[ecoHistory.cpu.length - 1];
+    const ramPt  = ecoHistory.ram[ecoHistory.ram.length - 1];
+    const tempPt = ecoHistory.temp[ecoHistory.temp.length - 1];
+    if (!cpuPt && !ramPt && !tempPt) return null;
+    return {
+      cpu: cpuPt?.value || 0,
+      ram: ramPt?.value || 0,
+      cpu_temp: tempPt?.value || 0,
+    };
+  };
   try {
     const webSid = await getCachedWebSid(session);
-    if (!webSid) return res.json({ cpu: 0, ram: 0, cpu_temp: 0 });
+    if (!webSid) return res.json(lastFromHistory() || { cpu: 0, ram: 0, cpu_temp: 0 });
 
     const pages = ['home', 'eco', 'ecoStat', 'overview', 'system', 'sysStat'];
     for (const page of pages) {
@@ -763,10 +896,10 @@ app.get('/api/fritz/eco-stats', async (req, res) => {
         }
       } catch {}
     }
-    return res.json({ cpu: 0, ram: 0, cpu_temp: 0 });
+    return res.json(lastFromHistory() || { cpu: 0, ram: 0, cpu_temp: 0 });
   } catch (err) {
     console.error('EcoStats error:', err.message);
-    return res.json({ cpu: 0, ram: 0, cpu_temp: 0 });
+    return res.json(lastFromHistory() || { cpu: 0, ram: 0, cpu_temp: 0 });
   }
 });
 
@@ -1134,6 +1267,21 @@ app.get('/api/fritz/network/wan', async (req, res) => {
   return res.json({});
 });
 
+// XML-Entities auflösen (`&auml;` / `&#252;` / `&#xE4;`). SOAP-Antworten der Fritz!Box
+// liefern Umlaute teils als benannte oder numerische Entities; ohne Decode landen sie
+// als `Mein Caf&eacute;` im UI.
+function decodeXmlEntities(s) {
+  if (typeof s !== 'string' || s.indexOf('&') === -1) return s;
+  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'",
+    auml: 'ä', ouml: 'ö', uuml: 'ü', Auml: 'Ä', Ouml: 'Ö', Uuml: 'Ü',
+    szlig: 'ß', eacute: 'é', Eacute: 'É', agrave: 'à', egrave: 'è',
+    nbsp: ' ' };
+  return s
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&([a-zA-Z]+);/g, (m, n) => (named[n] !== undefined ? named[n] : m));
+}
+
 app.get('/api/fritz/network/wlan', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   const session = sessions.get(sid);
@@ -1149,7 +1297,11 @@ app.get('/api/fritz/network/wlan', async (req, res) => {
           const keys = await soapRequest(session.host, svc, 'GetSecurityKeys', session.username, session.password, session.controlUrls);
           keyPassphrase = keys.NewKeyPassphrase || '';
         } catch {}
-        results.push({ ...info, NewKeyPassphrase: keyPassphrase, _index: i });
+        if (info && typeof info === 'object') {
+          if (info.NewSSID) info.NewSSID = decodeXmlEntities(info.NewSSID);
+          if (info.NewSecure) info.NewSecure = decodeXmlEntities(info.NewSecure);
+        }
+        results.push({ ...info, NewKeyPassphrase: decodeXmlEntities(keyPassphrase), _index: i });
       } catch {}
     }
     return res.json(results);
@@ -1328,19 +1480,27 @@ app.get('/api/fritz/mesh', async (req, res) => {
   const webSid = await getCachedWebSid(session);
   if (!webSid) { console.log('Mesh: kein webSid verfügbar'); return res.json({ nodes: [], links: [] }); }
 
-  // timeoutFetch: Timer startet erst wenn fetch tatsächlich anläuft (nach Rate-Limiter),
-  // sonst würde die Wartezeit in der Queue das Timeout verbrauchen und zu Abbrüchen führen.
+  // timeoutFetch: Holt den Rate-Limiter-Slot ZUERST und startet den Abort-Timer dann.
+  // So wird die Queue-Wartezeit nicht vom Timeout-Budget abgezogen – wichtig seit 1.3.9
+  // (strengere Limits: 2 parallel data.lua + 400ms Mindestabstand).
   async function timeoutFetch(url, opts = {}, ms = 8000) {
+    const urlStr = typeof url === 'string' ? url : String(url || '');
+    const needsDataSlot = urlStr.includes('/data.lua');
+    const needsSoapSlot = !needsDataSlot && urlStr.includes(':49000');
+    const release = needsDataSlot ? await acquireDataLuaSlot()
+                  : needsSoapSlot ? await acquireSoapSlot()
+                  : () => {};
     const ctrl = new AbortController();
-    const combined = { ...opts, signal: ctrl.signal };
-    const p = fetch(url, combined);
-    let timer;
-    const timeoutPromise = new Promise((_, reject) => {
-      timer = setTimeout(() => { ctrl.abort(); reject(new Error('timeout')); }, ms);
-    });
+    const timer = setTimeout(() => ctrl.abort(), ms);
     try {
-      return await Promise.race([p, timeoutPromise]);
-    } finally { clearTimeout(timer); }
+      // Direkt _origFetch – sonst würde patchedFetch einen zweiten Slot holen.
+      return await (needsDataSlot || needsSoapSlot
+        ? _origFetch(url, { ...opts, signal: ctrl.signal })
+        : fetch(url, { ...opts, signal: ctrl.signal }));
+    } finally {
+      clearTimeout(timer);
+      release();
+    }
   }
 
   async function tryDataLuaPage(page, xhrId = 'all', timeoutMs = 15000) {
@@ -1590,7 +1750,7 @@ app.get('/api/fritz/smartHome', async (req, res) => {
         if (text.trim().startsWith('{')) {
           const data = JSON.parse(text);
           const devices = data?.data?.devices || data?.data || [];
-          if (Array.isArray(devices) && devices.length > 0) return res.json(devices);
+          if (Array.isArray(devices) && devices.length > 0) return res.json(dedupSmartHomeDevices(devices));
         }
       } catch {}
     }
@@ -1623,15 +1783,17 @@ app.get('/api/fritz/dect', async (req, res) => {
       try {
         const entry = await soapRequest(session.host, 'urn:dslforum-org:service:X_AVM-DE_Dect:1', 'GetGenericDectEntry', session.username, session.password, session.controlUrls, { NewIndex: String(i) });
         const name = entry.NewDeviceName || entry.NewName || '';
-        // GetGenericDectEntry listet nur REGISTRIERTE Handsets – deshalb active=true
-        // wenn ein Name vorhanden ist. NewActive/NewConnected werden je nach Firmware
-        // unterschiedlich interpretiert und liefern auf vielen Boxen '0' im Bereitschaftsmodus.
+        // Drei Zustände pro Handset:
+        // - registered: steht in der Entry-Liste → immer true (sonst wäre das Gerät abgemeldet)
+        // - active:    NewActive === '1'  → Telefon ist EIN und erreichbar (Standby zählt)
+        // - connected: NewConnected === '1' → Telefon ist in einem aktiven Gespräch
         handsets.push({
           name: name || `Handset ${i + 1}`,
           model: entry.NewManufacturerOUI || '',
           id: entry.NewIntId || entry.NewId || String(i),
-          active: !!name,
-          connected: entry.NewActive === '1' || entry.NewConnected === '1',
+          registered: true,
+          active: entry.NewActive === '1',
+          connected: entry.NewConnected === '1',
           battery: entry.NewBatteryChargeStat || entry.NewBattery || '',
         });
       } catch {}
@@ -1670,18 +1832,18 @@ app.get('/api/fritz/dect', async (req, res) => {
                 if (Array.isArray(list) && list.length > 0) {
                   for (const h of list) {
                     const name = h.name || h.device_name || h.devicename || h.displayname || '';
-                    // data.lua listet registrierte Handsets – wenn ein Name vorhanden ist,
-                    // gilt das Gerät als registriert/aktiv. Die einzelnen Statusfelder
-                    // (active, connect, registered, state) werden je nach Firmware anders belegt.
-                    const reachable = h.active === '1' || h.active === true
+                    // data.lua-Fallback: wenn das Handset in der Liste steht, ist es registriert.
+                    // Aktiv = aktuell eingeschaltet/erreichbar; inCall = gerade im Gespräch.
+                    const active = h.active === '1' || h.active === true
                       || h.connect === '1' || h.connected === '1' || h.connected === true
-                      || h.registered === '1' || h.state === 'connected';
+                      || h.registered === '1' || h.state === 'connected' || h.state === 'active';
                     handsets.push({
                       name: name || 'Handset',
                       model: h.model || h.product || h.productname || '',
                       id: String(h.id || h.intern_id || h.index || ''),
-                      active: !!name,
-                      connected: reachable,
+                      registered: true,
+                      active,
+                      connected: h.incall === '1' || h.incall === true || h.state === 'incall',
                       battery: String(h.battery || h.akku || h.batterycharge || ''),
                     });
                   }
@@ -1726,8 +1888,14 @@ app.get('/api/fritz/calls', async (req, res) => {
         const duration = x.match(/<Duration>([^<]*)<\/Duration>/)?.[1] || '';
         const caller = x.match(/<Caller>([^<]*)<\/Caller>/)?.[1] || '';
         const called = x.match(/<Called>([^<]*)<\/Called>/)?.[1] || '';
-        const number = (type === '3' || type === '1' || type === '10') ? caller : called;
-        calls.push({ date, name, number, type, duration });
+        const device = x.match(/<Device>([^<]*)<\/Device>/)?.[1] || '';
+        // Fritz-XML-Semantik: Caller = wer angerufen hat, Called = wer angerufen wurde.
+        // Das passt 1:1 auf from/to – egal ob eingehend oder ausgehend.
+        // Eingehend (1), Verpasst (2), Aktiv eingehend (9), Abgewiesen (10) → Gegenstelle = Caller.
+        const isIncoming = type === '1' || type === '2' || type === '9' || type === '10';
+        // number (Altfeld) zeigt weiterhin die Gegenstelle – für Rückwärtskompatibilität
+        const number = isIncoming ? caller : called;
+        calls.push({ date, name, number, from: caller, to: called, device, type, duration });
       }
       return res.json(calls);
     }

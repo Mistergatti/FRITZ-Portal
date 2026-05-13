@@ -1,4 +1,5 @@
 import { useTheme } from '../hooks/useTheme';
+import { useI18n } from '../lib/i18n';
 import logo from '../logo.png';
 
 type Page = 'dashboard' | 'devices' | 'device-detail' | 'network' | 'traffic' | 'telefonie' | 'smarthome' | 'system';
@@ -10,7 +11,7 @@ interface HeaderProps {
 
 const navItems: { page: Page; label: string; icon: string }[] = [
   { page: 'dashboard', label: 'Dashboard', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
-  { page: 'devices', label: 'Ger\u00e4te', icon: 'M2 3h20v14H2zM8 21h8M12 17v4' },
+  { page: 'devices', label: 'Geräte', icon: 'M2 3h20v14H2zM8 21h8M12 17v4' },
   { page: 'network', label: 'Netzwerk', icon: 'M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14' },
   { page: 'traffic', label: 'Traffic', icon: 'M22 12h-4l-3 9-6-18-3 9H2' },
   { page: 'telefonie', label: 'Telefonie', icon: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' },
@@ -20,6 +21,7 @@ const navItems: { page: Page; label: string; icon: string }[] = [
 
 export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
+  const { lang, setLang, t } = useI18n();
   const isDark = theme === 'dark';
 
   return (
@@ -37,11 +39,19 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d={item.icon} />
             </svg>
-            <span>{item.label}</span>
+            <span>{t(item.label)}</span>
           </button>
         ))}
       </nav>
-      <button className="header-theme-toggle" onClick={toggleTheme} title={isDark ? 'Light Mode' : 'Dark Mode'}>
+      <button
+        className="header-theme-toggle"
+        onClick={() => setLang(lang === 'de' ? 'en' : 'de')}
+        title={t('Sprache')}
+        style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, minWidth: 34 }}
+      >
+        {lang === 'de' ? 'EN' : 'DE'}
+      </button>
+      <button className="header-theme-toggle" onClick={toggleTheme} title={isDark ? t('Light Mode') : t('Dark Mode')}>
         {isDark ? (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
             <circle cx="12" cy="12" r="5" />

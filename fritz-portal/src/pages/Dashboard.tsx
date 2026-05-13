@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { apiFetch } from '../lib/apiFetch';
 import { getApiCache, setApiCache } from '../App';
+import { useT } from '../lib/i18n';
 
 interface Host {
   mac: string;
@@ -24,14 +25,15 @@ type EcoModal = 'cpu' | 'ram' | 'temp' | null;
 
 // ── Eco-History Modal ──────────────────────────────────────────────────────────
 function EcoHistoryModal({ type, sid, onClose }: { type: EcoModal; sid: string; onClose: () => void }) {
+  const t = useT();
   const [data, setData] = useState<{ time: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const headers = { 'X-Fritz-SID': sid };
 
   const labels: Record<NonNullable<EcoModal>, { title: string; unit: string; color: string }> = {
-    cpu:  { title: 'CPU-Auslastung',  unit: '%',  color: '#f59e0b' },
-    ram:  { title: 'RAM-Auslastung',  unit: '%',  color: '#8b5cf6' },
-    temp: { title: 'CPU-Temperatur',  unit: '°C', color: '#ef4444' },
+    cpu:  { title: t('CPU-Auslastung'),  unit: '%',  color: '#f59e0b' },
+    ram:  { title: t('RAM-Auslastung'),  unit: '%',  color: '#8b5cf6' },
+    temp: { title: t('CPU-Temperatur'),  unit: '°C', color: '#ef4444' },
   };
 
   useEffect(() => {
@@ -70,17 +72,17 @@ function EcoHistoryModal({ type, sid, onClose }: { type: EcoModal; sid: string; 
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{title} — letzte 3h</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{t('{title} — letzte 3h').replace('{title}', title)}</h3>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 20, lineHeight: 1 }}
           >✕</button>
         </div>
         {loading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>Lade Verlauf…</div>
+          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>{t('Lade Verlauf…')}</div>
         ) : data.length < 2 ? (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>
-            Noch nicht genug Datenpunkte.<br />Daten werden alle 10 Sekunden gesammelt.
+            {t('Noch nicht genug Datenpunkte.')}<br />{t('Daten werden alle 10 Sekunden gesammelt.')}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
@@ -103,6 +105,7 @@ function EcoHistoryModal({ type, sid, onClose }: { type: EcoModal; sid: string; 
 }
 
 export default function Dashboard({ sid }: DashboardProps) {
+  const t = useT();
   const [deviceInfo, setDeviceInfo] = useState<any>(null);
   const [hosts, setHosts] = useState<Host[]>([]);
   const [networkData, setNetworkData] = useState<NetworkData[]>([]);
@@ -279,7 +282,7 @@ export default function Dashboard({ sid }: DashboardProps) {
     <div>
       {ecoModal && <EcoHistoryModal type={ecoModal} sid={sid} onClose={() => setEcoModal(null)} />}
       <div className="page-header">
-        <h2>Dashboard</h2>
+        <h2>{t('Dashboard')}</h2>
         <p>{'FRITZ!Portal'}</p>
       </div>
 
@@ -290,10 +293,10 @@ export default function Dashboard({ sid }: DashboardProps) {
               <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
             </svg>
           </div>
-          <h3>Modell</h3>
+          <h3>{t('Modell')}</h3>
           <div className="value">{deviceInfo?.NewModelName || '-'}</div>
         </div>
-        <div className="stat-card" onClick={() => setEcoModal('cpu')} style={{ cursor: 'pointer' }} title="Verlauf anzeigen">
+        <div className="stat-card" onClick={() => setEcoModal('cpu')} style={{ cursor: 'pointer' }} title={t('Verlauf anzeigen')}>
           <div className="stat-icon orange">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" />
@@ -301,9 +304,9 @@ export default function Dashboard({ sid }: DashboardProps) {
           </div>
           <h3>CPU</h3>
           <div className="value">{cpuVal}%</div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Verlauf anzeigen →</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>{t('Verlauf anzeigen →')}</div>
         </div>
-        <div className="stat-card" onClick={() => setEcoModal('ram')} style={{ cursor: 'pointer' }} title="Verlauf anzeigen">
+        <div className="stat-card" onClick={() => setEcoModal('ram')} style={{ cursor: 'pointer' }} title={t('Verlauf anzeigen')}>
           <div className="stat-icon purple">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 20h20" /><path d="M5 20V8h4v12" /><path d="M11 20V4h4v16" /><path d="M17 20v-8h4v8" />
@@ -311,17 +314,17 @@ export default function Dashboard({ sid }: DashboardProps) {
           </div>
           <h3>RAM</h3>
           <div className="value">{ramVal}%</div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Verlauf anzeigen →</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>{t('Verlauf anzeigen →')}</div>
         </div>
-        <div className="stat-card" onClick={() => setEcoModal('temp')} style={{ cursor: 'pointer' }} title="Verlauf anzeigen">
+        <div className="stat-card" onClick={() => setEcoModal('temp')} style={{ cursor: 'pointer' }} title={t('Verlauf anzeigen')}>
           <div className="stat-icon red">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
             </svg>
           </div>
-          <h3>Temperatur</h3>
+          <h3>{t('Temperatur')}</h3>
           <div className="value">{tempVal}{'\u00b0'}C</div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Verlauf anzeigen →</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>{t('Verlauf anzeigen →')}</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon green">
@@ -329,7 +332,7 @@ export default function Dashboard({ sid }: DashboardProps) {
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
           </div>
-          <h3>{'Ger\u00e4te online'}</h3>
+          <h3>{t('Ger\u00e4te online')}</h3>
           <div className="value">{hosts.length}</div>
         </div>
         <div className="stat-card">
@@ -339,13 +342,13 @@ export default function Dashboard({ sid }: DashboardProps) {
               <line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" />
             </svg>
           </div>
-          <h3>IP-Adressen frei</h3>
+          <h3>{t('IP-Adressen frei')}</h3>
           <div className="value" style={{ color: '#14b8a6' }}>{ipStats.free}</div>
           <div style={{ marginTop: 6 }}>
             {ipStats.total > 0 && (
               <>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                  {ipStats.used} vergeben / {ipStats.total} gesamt
+                  {t('{u} vergeben / {n} gesamt').replace('{u}', String(ipStats.used)).replace('{n}', String(ipStats.total))}
                 </div>
                 <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
                   <div style={{
@@ -374,17 +377,17 @@ export default function Dashboard({ sid }: DashboardProps) {
         }}>
           <div style={{ display: 'flex', gap: 18, flex: 1 }}>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Download</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{t('Download')}</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: '#3b82f6' }}>{formatGB(monthlyDown || traffic.totalDown)} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>GB</span></div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Upload</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{t('Upload')}</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: '#22c55e' }}>{formatGB(monthlyUp || traffic.totalUp)} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>GB</span></div>
             </div>
           </div>
           <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 14 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Monatsverbrauch</div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{formatGB((monthlyDown || traffic.totalDown) + (monthlyUp || traffic.totalUp))} GB gesamt</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{t('Monatsverbrauch')}</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{t('{gb} GB gesamt').replace('{gb}', formatGB((monthlyDown || traffic.totalDown) + (monthlyUp || traffic.totalUp)))}</div>
           </div>
         </div>
 
@@ -399,25 +402,25 @@ export default function Dashboard({ sid }: DashboardProps) {
         }}>
           <div style={{ display: 'flex', gap: 18, flex: 1 }}>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Download</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{t('Download')}</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: '#3b82f6' }}>{formatMbps(traffic.currentDown)} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>Mbit/s</span></div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Upload</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{t('Upload')}</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: '#22c55e' }}>{formatMbps(traffic.currentUp)} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>Mbit/s</span></div>
             </div>
           </div>
           <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 14 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Geschwindigkeit</div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>Live</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{t('Geschwindigkeit')}</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{t('Live')}</div>
           </div>
         </div>
       </div>
 
       <div className="card">
         <div className="card-header">
-          <h3>Internet Upstream / Downstream (Live)</h3>
-          <span style={{ color: textColor, fontSize: 13 }}>alle 10 Sek.</span>
+          <h3>{t('Internet Upstream / Downstream (Live)')}</h3>
+          <span style={{ color: textColor, fontSize: 13 }}>{t('alle 10 Sek.')}</span>
         </div>
         <div className="card-body">
           <div className="chart-container">
