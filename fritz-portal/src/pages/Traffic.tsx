@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import StatTile from '../components/StatTile';
+import { useI18n } from '../i18n';
 
 interface Counter {
   name: string;
@@ -14,6 +16,7 @@ interface TrafficProps {
 }
 
 export default function Traffic({ sid }: TrafficProps) {
+  const { t } = useI18n();
   const [counters, setCounters] = useState<Counter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -35,10 +38,10 @@ export default function Traffic({ sid }: TrafficProps) {
         const allZero = rows.every(c => c.received === 0 && c.sent === 0);
         setBytesAvailable(!allZero);
       } else {
-        setError(data.debug ? `Server: ${data.debug}` : 'Keine Zählerdaten empfangen.');
+        setError(data.debug ? `Server: ${data.debug}` : t('traffic.error.noCounters'));
       }
     } catch {
-      setError('Fehler beim Laden der Trafficzähler.');
+      setError(t('traffic.error.fetch'));
     } finally {
       setLoading(false);
     }
@@ -60,63 +63,57 @@ export default function Traffic({ sid }: TrafficProps) {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
-  if (loading) return <div className="loading"><div className="spinner" /></div>;
+  if (loading) {
+    return (
+      <div className="loading">
+        <span className="terminal-cursor">$ {t('app.loading')}<span className="blink">\u25ae</span></span>
+      </div>
+    );
+  }
 
   return (
     <div>
       <div className="page-header">
-        <h2>Traffic</h2>
-        <p>Online-Z{'\u00e4'}hler &amp; Datenvolumen</p>
+        <h2>{t('page.traffic.title')}</h2>
+        <p>\u2500\u2500 {t('page.traffic.sub')}</p>
       </div>
 
-      {error && (
-        <div style={{
-          background: 'rgba(239,68,68,0.1)',
-          border: '1px solid #ef4444',
-          borderRadius: 8,
-          padding: '12px 16px',
-          marginBottom: 24,
-          color: '#ef4444',
-          fontSize: 14,
-        }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="error-message">{error}</div>}
 
       {!bytesAvailable && counters.length > 0 && (
         <div style={{
-          background: 'rgba(59,130,246,0.08)',
+          background: 'var(--bg-elevated)',
           border: '1px solid var(--border)',
-          borderRadius: 8,
+          borderRadius: 'var(--radius)',
           padding: '12px 16px',
-          marginBottom: 24,
+          marginBottom: 18,
           color: 'var(--text-secondary)',
-          fontSize: 14,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 13,
         }}>
-          <strong style={{ color: 'var(--text-primary)' }}>Datenvolumen nicht verfügbar</strong> – Die Fritz!Box liefert keine Volumen-Statistik.
-          Bitte prüfe in der Fritz!Box-Oberfläche unter <strong>Internet &nbsp;›&nbsp; Online-Zähler</strong>,
-          ob die Zählung aktiviert ist. Online-Zeiten werden trotzdem angezeigt.
+          <strong style={{ color: 'var(--text-primary)' }}>{t('traffic.unavailable')}</strong> – {t('traffic.unavailable.body')}
           <div style={{ marginTop: 10 }}>
             <button
               onClick={runDiag}
               disabled={diagLoading}
-              style={{ padding: '4px 12px', fontSize: 12, borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}
+              className="btn btn-outline"
+              style={{ padding: '5px 12px', fontSize: 12 }}
             >
-              {diagLoading ? 'Prüfe...' : 'Diagnose: Verfügbare Endpunkte prüfen'}
+              {diagLoading ? t('traffic.diag.busy') : t('traffic.diag')}
             </button>
           </div>
         </div>
       )}
 
       {diagResult && (
-        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 24, fontSize: 12 }}>
-          <strong style={{ display: 'block', marginBottom: 8 }}>Diagnose-Ergebnis (welche Methode liefert Daten?)</strong>
+        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 16, marginBottom: 18, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          <strong style={{ display: 'block', marginBottom: 8, color: 'var(--text-primary)' }}>┃ {t('traffic.diag.result')}</strong>
           {Object.entries(diagResult).map(([k, v]) => {
             const str = typeof v === 'string' ? v : JSON.stringify(v);
             return (
               <div key={k} style={{ marginBottom: 8 }}>
-                <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{k}: </span>
-                <span style={{ color: str.includes('GB') || str.includes('"grossbytes') ? '#22c55e' : 'var(--text-secondary)', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{k}: </span>
+                <span style={{ color: str.includes('GB') || str.includes('"grossbytes') ? 'var(--success)' : 'var(--text-muted)', wordBreak: 'break-all' }}>
                   {str.substring(0, 300)}
                 </span>
               </div>
@@ -127,95 +124,50 @@ export default function Traffic({ sid }: TrafficProps) {
 
       {counters.length > 0 ? (
         <>
-          {/* Summary cards for the first entry (Heute) */}
+          {/* Summary tiles for the first entry (Heute) */}
           {counters[0] && (
-            <div className="stats-grid" style={{ marginBottom: 24 }}>
-              <div className="stat-card">
-                <div className="stat-icon blue">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="8 17 12 21 16 17" /><line x1="12" y1="3" x2="12" y2="21" />
-                  </svg>
-                </div>
-                <h3>Heute Empfangen</h3>
-                <div className="value" style={{ color: '#3b82f6' }}>{fmtBytes(counters[0].received)}</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon green">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="16 7 12 3 8 7" /><line x1="12" y1="21" x2="12" y2="3" />
-                  </svg>
-                </div>
-                <h3>Heute Gesendet</h3>
-                <div className="value" style={{ color: '#22c55e' }}>{fmtBytes(counters[0].sent)}</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon orange">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                  </svg>
-                </div>
-                <h3>Heute Online-Zeit</h3>
-                <div className="value" style={{ color: '#f59e0b' }}>{counters[0].onlineTime}</div>
-              </div>
+            <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+              <StatTile label={t('traffic.tile.todayRx')}  value={fmtBytes(counters[0].received)} accent="var(--accent)" />
+              <StatTile label={t('traffic.tile.todayTx')}  value={fmtBytes(counters[0].sent)}     accent="var(--success)" />
+              <StatTile label={t('traffic.tile.online')}   value={counters[0].onlineTime}         accent="var(--warning)" />
               {counters[3] && (
-                <div className="stat-card">
-                  <div className="stat-icon" style={{ background: 'rgba(139,92,246,0.12)' }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
-                    </svg>
-                  </div>
-                  <h3>Monat Gesamt</h3>
-                  <div className="value" style={{ color: '#8b5cf6' }}>{fmtBytes(counters[3].received + counters[3].sent)}</div>
-                </div>
+                <StatTile label={t('traffic.tile.monthAll')} value={fmtBytes(counters[3].received + counters[3].sent)} accent="var(--info-pink)" />
               )}
             </div>
           )}
 
           <div className="card">
             <div className="card-header">
-              <h3>Online-Z{'\u00e4'}hler</h3>
-              <button
-                onClick={load}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 6,
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}
-              >
-                Aktualisieren
+              <h3>{t('traffic.counters')}</h3>
+              <button onClick={load} className="btn btn-outline" style={{ padding: '5px 12px', fontSize: 12 }}>
+                {t('traffic.reload')}
               </button>
             </div>
-            <div className="card-body">
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Zeitraum</th>
-                      <th>Online-Zeit</th>
-                      <th>Gesamt</th>
-                      <th style={{ color: '#3b82f6' }}>Empfangen</th>
-                      <th style={{ color: '#22c55e' }}>Gesendet</th>
-                      <th>Verbindungen</th>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t('traffic.col.period')}</th>
+                    <th>{t('traffic.col.onlineTime')}</th>
+                    <th>{t('traffic.col.total')}</th>
+                    <th style={{ color: 'var(--accent)' }}>{t('traffic.col.rx')}</th>
+                    <th style={{ color: 'var(--success)' }}>{t('traffic.col.tx')}</th>
+                    <th>{t('traffic.col.conn')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {counters.map((c, i) => (
+                    <tr key={i} style={{ fontWeight: i === 0 ? 600 : 400 }}>
+                      <td>{c.name}</td>
+                      <td>{c.onlineTime}</td>
+                      <td>{fmtBytes(c.received + c.sent)}</td>
+                      <td style={{ color: 'var(--accent)' }}>{fmtBytes(c.received)}</td>
+                      <td style={{ color: 'var(--success)' }}>{fmtBytes(c.sent)}</td>
+                      <td>{c.connections}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {counters.map((c, i) => (
-                      <tr key={i} style={{ fontWeight: i === 0 ? 600 : 400 }}>
-                        <td>{c.name}</td>
-                        <td>{c.onlineTime}</td>
-                        <td>{fmtBytes(c.received + c.sent)}</td>
-                        <td style={{ color: '#3b82f6' }}>{fmtBytes(c.received)}</td>
-                        <td style={{ color: '#22c55e' }}>{fmtBytes(c.sent)}</td>
-                        <td>{c.connections}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </>

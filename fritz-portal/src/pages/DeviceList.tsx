@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
 import { getApiCache, setApiCache } from '../App';
+import StatTile from '../components/StatTile';
+import { useI18n } from '../i18n';
 
 interface Host {
   mac: string;
@@ -30,6 +32,7 @@ interface DeviceListProps {
 }
 
 export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
+  const { t } = useI18n();
   const [hosts, setHosts] = useState<Host[]>([]);
   const [ipStats, setIpStats] = useState<IpStats>({ total: 0, used: 0, free: 0, minAddress: '', maxAddress: '' });
   const [freeIpNumbers, setFreeIpNumbers] = useState<number[]>([]);
@@ -146,10 +149,10 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
     const n = parseInt(ts, 10);
     if (!n) return '';
     const diff = Math.floor((Date.now() / 1000) - n);
-    if (diff < 60) return 'gerade eben';
-    if (diff < 3600) return `vor ${Math.floor(diff / 60)} Min`;
-    if (diff < 86400) return `vor ${Math.floor(diff / 3600)} Std`;
-    return `vor ${Math.floor(diff / 86400)} Tagen`;
+    if (diff < 60)    return t('devices.lastActivity.now');
+    if (diff < 3600)  return t('devices.lastActivity.min', { n: Math.floor(diff / 60) });
+    if (diff < 86400) return t('devices.lastActivity.h',   { n: Math.floor(diff / 3600) });
+    return t('devices.lastActivity.d', { n: Math.floor(diff / 86400) });
   };
 
   const isWlan = (h: Host) => {
@@ -184,77 +187,56 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
   const onlineCount = hosts.filter(h => h.active).length;
   const offlineCount = hosts.filter(h => !h.active).length;
 
-  if (loading) return <div className="loading"><div className="spinner" /></div>;
+  if (loading) {
+    return (
+      <div className="loading">
+        <span className="terminal-cursor">$ {t('app.loading')}<span className="blink">\u25ae</span></span>
+      </div>
+    );
+  }
 
   return (
     <div>
       <div className="page-header">
-        <h2>Netzwerk Ger{"\u00e4"}te</h2>
+        <h2>{t('page.devices.title')}</h2>
         <p>
           {ipStats.total > 0
-            ? <>{ipStats.total} IP-Adressen {'\u2014'} {ipStats.used} vergeben {'\u2014'} {ipStats.free} verf{"\u00fc"}gbar</>
-            : <>{hosts.length} Ger{"\u00e4"}te insgesamt {'\u2014'} {onlineCount} online {'\u2014'} {offlineCount} offline</>
+            ? <>\u2500\u2500 {t('page.devices.sub.ip', { total: ipStats.total, used: ipStats.used, free: ipStats.free })}</>
+            : <>\u2500\u2500 {t('page.devices.sub.hosts', { total: hosts.length, online: onlineCount, offline: offlineCount })}</>
           }
         </p>
       </div>
 
-      <div className="stats-grid" style={{ marginBottom: 24 }}>
-        <div className="stat-card">
-          <div className="stat-icon blue">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
-            </svg>
-          </div>
-          <h3>Gesamt</h3>
-          <div className="value">{hosts.length}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon green">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-          </div>
-          <h3>Online</h3>
-          <div className="value">{onlineCount}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon orange">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-            </svg>
-          </div>
-          <h3>Offline</h3>
-          <div className="value">{offlineCount}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon purple">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="2" width="20" height="8" rx="2" /><rect x="2" y="14" width="20" height="8" rx="2" /><line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" />
-            </svg>
-          </div>
-          <h3>Freie IPs</h3>
-          <div className="value" style={{ fontSize: 16, fontWeight: 500 }}>
-            {freeIpNumbers.length > 0 ? freeIpNumbers.join(', ') : '-'}
-          </div>
-        </div>
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <StatTile label={t('tile.total')}   value={hosts.length} />
+        <StatTile label={t('tile.online')}  value={onlineCount}  accent="var(--success)" />
+        <StatTile label={t('tile.offline')} value={offlineCount} accent="var(--warning)" />
+        <StatTile
+          label={t('tile.freeIps')}
+          value={freeIpNumbers.length > 0 ? freeIpNumbers.join(' ') : '\u2014'}
+          accent="var(--info-cyan)"
+          style={{ wordBreak: 'break-word' }}
+        />
       </div>
 
       <div className="card">
         <div className="card-header">
-          <h3>Alle Ger{"\u00e4"}te</h3>
+          <h3>{t('devices.all')}</h3>
           <input
             type="text"
-            placeholder="Suchen..."
+            placeholder={t('devices.search')}
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
-              padding: '8px 14px',
-              borderRadius: 8,
+              padding: '7px 12px',
+              borderRadius: 3,
               border: '1px solid var(--border)',
-              background: 'var(--bg-primary)',
+              background: 'var(--bg-elevated)',
               color: 'var(--text-primary)',
-              fontSize: 14,
-              width: 240,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              width: 260,
+              letterSpacing: 0.3,
             }}
           />
         </div>
@@ -263,12 +245,12 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
             <table>
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('status')}>Status{getSortIndicator('status')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('name')}>Name{getSortIndicator('name')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('ip')}>IP-Adresse{getSortIndicator('ip')}</th>
-                  <th>MAC-Adresse</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('connection')}>Verbindung{getSortIndicator('connection')}</th>
-                  <th>Zuletzt online</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('status')}>{t('devices.col.status')}{getSortIndicator('status')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('name')}>{t('devices.col.name')}{getSortIndicator('name')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('ip')}>{t('devices.col.ip')}{getSortIndicator('ip')}</th>
+                  <th>{t('devices.col.mac')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('connection')}>{t('devices.col.conn')}{getSortIndicator('connection')}</th>
+                  <th>{t('devices.col.lastSeen')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -276,9 +258,9 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                   <tr key={i} onClick={() => onSelectDevice(host.mac)} style={{ cursor: 'pointer' }}>
                     <td>
                       <span className={`status-dot ${host.active ? 'online' : 'offline'}`} />
-                      {host.active ? 'Online' : 'Offline'}
+                      {host.active ? t('devices.status.online') : t('devices.status.offline')}
                     </td>
-                    <td className="device-name">{host.name || 'Unbekannt'}</td>
+                    <td className="device-name">{host.name || t('devices.lastActivity.unknown')}</td>
                     <td>
                       {host.ip ? (
                         <>
@@ -295,9 +277,10 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                           {host.addressSource === 'Static' && (
                             <span title="Feste IP-Adresse" style={{
                               marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '1px 5px',
-                              borderRadius: 4, background: '#3b82f620', color: '#3b82f6',
-                              border: '1px solid #3b82f640', verticalAlign: 'middle',
-                            }}>FEST</span>
+                              borderRadius: 3, background: 'var(--accent-dim)', color: 'var(--accent)',
+                              border: '1px solid var(--accent-soft)', verticalAlign: 'middle',
+                              fontFamily: 'var(--font-mono)', letterSpacing: 0.5,
+                            }}>{t('devices.fixed')}</span>
                           )}
                         </>
                       ) : '—'}
@@ -306,7 +289,7 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                     <td>
                       {(() => {
                         const wlan = isWlan(host);
-                        const color = wlan ? '#10b981' : '#3b82f6';
+                        const color = wlan ? 'var(--info-cyan)' : 'var(--accent)';
                         const icon = wlan ? (
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
                             <path d="M5 12.55a11 11 0 0 1 14.08 0" /><path d="M1.42 9a16 16 0 0 1 21.16 0" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><circle cx="12" cy="20" r="1" fill={color} />
@@ -335,14 +318,14 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                     <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                       {host.active
                         ? (formatLastActivity(host.lastActivity) || '—')
-                        : (formatLastActivity(host.lastActivity) || 'Unbekannt')}
+                        : (formatLastActivity(host.lastActivity) || t('devices.lastActivity.unknown'))}
                     </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 32 }}>
-                      Keine Ger{"\u00e4"}te gefunden
+                      {t('devices.empty')}
                     </td>
                   </tr>
                 )}

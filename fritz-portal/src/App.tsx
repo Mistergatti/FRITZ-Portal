@@ -1,5 +1,6 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect } from 'react';
 import Header from './components/Header';
+import StatusLine from './components/StatusLine';
 import Dashboard from './pages/Dashboard';
 import DeviceList from './pages/DeviceList';
 import DeviceDetail from './pages/DeviceDetail';
@@ -9,6 +10,7 @@ import Telefonie from './pages/Telefonie';
 import SmartHome from './pages/SmartHome';
 import System from './pages/System';
 import { apiFetch } from './lib/apiFetch';
+import { useI18n } from './i18n';
 
 type Page = 'dashboard' | 'devices' | 'device-detail' | 'network' | 'traffic' | 'telefonie' | 'smarthome' | 'system';
 
@@ -22,6 +24,7 @@ interface AppCache {
 }
 
 const CACHE_TTL = 600000; // 10 minutes
+const APP_VERSION = '1.4.2';
 
 function getApiCache(key: string): any {
   const cached = (window as any).__apiCache?.[key];
@@ -39,59 +42,81 @@ function setApiCache(key: string, data: any) {
 
 export { getApiCache, setApiCache };
 
+interface StatusInfo {
+  uptime: number | null;
+  firmware: string | null;
+  wanIp: string | null;
+  load: string | null;
+}
+
+function formatLoad(s: { load1?: number; load5?: number; load15?: number } | null | undefined): string | null {
+  if (!s) return null;
+  const fmt = (v: number | undefined) => (typeof v === 'number' ? v.toFixed(2) : '—');
+  if (s.load1 == null && s.load5 == null && s.load15 == null) return null;
+  return `${fmt(s.load1)} / ${fmt(s.load5)} / ${fmt(s.load15)}`;
+}
+
 export default function App() {
+  const { t } = useI18n();
   const [sid, setSid] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<StatusInfo>({ uptime: null, firmware: null, wanIp: null, load: null });
 
   // HA Add-on: Auto-Session beim Start - KEINE Login-Seite
   useEffect(() => {
-    console.log('App starting - attempting auto-login...');
-    
     apiFetch('/api/fritz/auto-session')
-      .then((r: Response) => {
-        console.log('Auto-session response status:', r.status);
-        return r.json();
-      })
+      .then((r: Response) => r.json())
       .then((data: any) => {
-        console.log('Auto-session data:', data);
         if (data.active && data.sid) {
-          console.log('Auto-login successful, setting SID');
           setSid(data.sid);
           setError(null);
         } else {
-          console.log('Auto-login failed - no credentials configured in Add-On');
-          setError('Add-On nicht konfiguriert. Bitte FRITZ!Box Zugangsdaten im Add-On eintragen.');
+          setError(t('app.error.notConfigured'));
         }
         setLoading(false);
       })
-      .catch((err: any) => {
-        console.error('Auto-login error:', err);
-        setError('Verbindung zum Server fehlgeschlagen. Add-On läuft nicht korrekt.');
+      .catch(() => {
+        setError(t('app.error.server'));
         setLoading(false);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleLogout = async () => {
-    if (sid) {
+  // Status-Line Daten regelmäßig aktualisieren
+  useEffect(() => {
+    if (!sid) return;
+    const headers = { 'X-Fritz-SID': sid };
+
+    const loadInfo = async () => {
       try {
-        await apiFetch('/api/fritz/logout', {
-          method: 'POST',
-          headers: { 'X-Fritz-SID': sid },
-        });
+        const r = await apiFetch('/api/fritz/device-info', { headers });
+        const info = await r.json();
+        setStatus(s => ({
+          ...s,
+          uptime: typeof info?.NewUpTime === 'number' ? info.NewUpTime : (parseInt(info?.NewUpTime, 10) || null),
+          firmware: info?.NewSoftwareVersion || info?.NewFirmwareVersion || null,
+          wanIp: info?.NewExternalIPAddress || s.wanIp,
+        }));
       } catch {}
-    }
-    // Auto-Session neu prüfen (bleibt aktiv wenn HA Add-on mit Env-Vars konfiguriert)
-    try {
-      const r = await apiFetch('/api/fritz/auto-session');
-      const data = await r.json();
-      if (data.active && data.sid) { setSid(data.sid); return; }
-    } catch {}
-    setSid(null);
-    setError('Abgemeldet. Bitte Add-On neu starten.');
-  };
+    };
+
+    const loadEco = async () => {
+      try {
+        const r = await apiFetch('/api/fritz/eco-stats', { headers });
+        const eco = await r.json();
+        setStatus(s => ({ ...s, load: formatLoad(eco) }));
+      } catch {}
+    };
+
+    loadInfo();
+    loadEco();
+    const tInfo = setInterval(loadInfo, 60000);
+    const tEco  = setInterval(loadEco, 15000);
+    return () => { clearInterval(tInfo); clearInterval(tEco); };
+  }, [sid]);
 
   const handleSelectDevice = (mac: string) => {
     setSelectedDevice(mac);
@@ -103,37 +128,51 @@ export default function App() {
     setCurrentPage('devices');
   };
 
-  // Show loading while checking for auto-session
   if (loading) {
     return (
       <div className="login-container">
         <div className="login-card">
-          <div className="logo">
-            <div className="icon"></div>
-            <h1>FRITZ!Portal</h1>
-            <p>Wird initialisiert...</p>
+          <div className="login-head">
+            <span className="title">AUTH</span>
+            <span>── fritz.box</span>
+          </div>
+          <div className="login-body">
+            <div className="logo">
+              <div className="icon" />
+              <h1>fritz<span className="bang">!</span>portal</h1>
+              <p>{t('app.init')}</p>
+            </div>
+            <div style={{ textAlign: 'center', padding: '12px 0' }}>
+              <span className="terminal-cursor">$ {t('app.loading')}<span className="blink">▮</span></span>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // Show error if auto-login failed - NO LOGIN FORM
   if (error || !sid) {
     return (
       <div className="login-container">
         <div className="login-card">
-          <div className="logo">
-            <div className="icon"></div>
-            <h1>FRITZ!Portal</h1>
+          <div className="login-head">
+            <span className="title">AUTH</span>
+            <span>── fritz.box</span>
           </div>
-          <div className="error-message">
-            {error || 'Fehler beim Autostart. Bitte Add-On-Konfiguration überprüfen.'}
-          </div>
-          <div style={{ padding: '20px', fontSize: '14px', color: '#999', textAlign: 'center' }}>
-            <p><strong>Konfiguration erforderlich:</strong></p>
-            <p>Home Assistant → Einstellungen → Add-Ons → FRITZ!Portal → Konfiguration</p>
-            <p>Geben Sie FRITZ!Box-Adresse, Benutzername und Passwort ein.</p>
+          <div className="login-body">
+            <div className="logo">
+              <div className="icon" />
+              <h1>fritz<span className="bang">!</span>portal</h1>
+              <p>FRITZ!Box Add-On</p>
+            </div>
+            <div className="error-message">
+              {error || t('app.error.fallback')}
+            </div>
+            <div style={{ padding: '6px 0', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.7 }}>
+              <p><strong style={{ color: 'var(--text-primary)' }}>$ {t('app.config.title')}</strong></p>
+              <p>{t('app.config.path')}</p>
+              <p>{t('app.config.hint')}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -145,6 +184,15 @@ export default function App() {
       <Header
         currentPage={currentPage === 'device-detail' ? 'devices' : currentPage}
         onNavigate={(page) => { setCurrentPage(page); setSelectedDevice(null); }}
+        version={APP_VERSION}
+      />
+      <StatusLine
+        authenticated={!!sid}
+        uptime={status.uptime}
+        firmware={status.firmware}
+        load={status.load}
+        wanIp={status.wanIp}
+        recording={true}
       />
       <main className="main-content">
         {currentPage === 'dashboard' && <Dashboard sid={sid} />}
@@ -158,6 +206,13 @@ export default function App() {
         {currentPage === 'smarthome' && <SmartHome sid={sid} />}
         {currentPage === 'system' && <System sid={sid} />}
       </main>
+      <div className="cmd-hint">
+        <span><span className="accent">$</span> {t('app.ready')}</span>
+        <span>↑↓ {t('footer.navigate')}</span>
+        <span>enter {t('footer.open')}</span>
+        <span>/ {t('footer.search')}</span>
+        <span className="right">{t('footer.theme')}: <span className="accent">SLATE</span></span>
+      </div>
     </div>
   );
 }

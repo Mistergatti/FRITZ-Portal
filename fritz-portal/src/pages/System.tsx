@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import { useI18n } from '../i18n';
 
 interface SystemProps {
   sid: string;
 }
 
 export default function System({ sid }: SystemProps) {
+  const { t } = useI18n();
   const [deviceInfo, setDeviceInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [rebooting, setRebooting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [version] = useState('1.3.8');
+  const [version] = useState('1.4.2');
   const [fritzHost, setFritzHost] = useState('fritz.box');
 
   // HA-Sensor-Einstellungen
@@ -66,18 +68,18 @@ export default function System({ sid }: SystemProps) {
         }),
       });
       const data = await res.json();
-      if (data.success) { setHaMessageOk(true);  setHaMessage('Einstellungen gespeichert.'); }
-      else               { setHaMessageOk(false); setHaMessage('Fehler beim Speichern.'); }
+      if (data.success) { setHaMessageOk(true);  setHaMessage(t('system.ha.saved')); }
+      else               { setHaMessageOk(false); setHaMessage(t('system.ha.saveError')); }
     } catch {
       setHaMessageOk(false);
-      setHaMessage('Verbindungsfehler.');
+      setHaMessage(t('system.ha.connError'));
     } finally {
       setHaSaving(false);
     }
   };
 
   const handleReboot = async () => {
-    if (!confirm('Möchten Sie die FritzBox wirklich neustarten?')) return;
+    if (!confirm(t('system.reboot.confirm'))) return;
     setRebooting(true);
     setMessage('');
     setError('');
@@ -85,18 +87,24 @@ export default function System({ sid }: SystemProps) {
       const res = await apiFetch('/api/fritz/reboot', { method: 'POST', headers });
       const data = await res.json();
       if (data.success) {
-        setMessage('Neustart wurde ausgelöst. Die FritzBox startet jetzt neu...');
+        setMessage(t('system.reboot.started'));
       } else {
-        setError(data.error || 'Neustart fehlgeschlagen');
+        setError(data.error || t('system.reboot.failed'));
       }
     } catch (err) {
-      setError('Verbindungsfehler');
+      setError(t('detail.msg.connError'));
     } finally {
       setRebooting(false);
     }
   };
 
-  if (loading) return <div className="loading"><div className="spinner" /></div>;
+  if (loading) {
+    return (
+      <div className="loading">
+        <span className="terminal-cursor">$ loading<span className="blink">▮</span></span>
+      </div>
+    );
+  }
 
   const upTime = deviceInfo?.NewUpTime
     ? `${Math.floor(deviceInfo.NewUpTime / 86400)}d ${Math.floor((deviceInfo.NewUpTime % 86400) / 3600)}h ${Math.floor((deviceInfo.NewUpTime % 3600) / 60)}m`
@@ -107,8 +115,8 @@ export default function System({ sid }: SystemProps) {
   return (
     <div>
       <div className="page-header">
-        <h2>System</h2>
-        <p>FRITZ!Box Systeminformationen und Verwaltung</p>
+        <h2>{t('page.system.title')}</h2>
+        <p>── {t('page.system.sub')}</p>
       </div>
 
       {error && <div className="error-message">{error}</div>}
@@ -116,124 +124,106 @@ export default function System({ sid }: SystemProps) {
 
       <div className="card">
         <div className="card-header">
-          <h3>Systeminformationen</h3>
+          <h3>{t('system.info')}</h3>
         </div>
-        <div className="card-body">
-          <table>
-            <tbody>
-              <tr>
-                <td style={{ fontWeight: 500, width: 200, color: 'var(--text-secondary)' }}>Modell</td>
-                <td>{deviceInfo?.NewModelName || '-'}</td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Hardware</td>
-                <td>{deviceInfo?.NewHardwareVersion || '-'}</td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>FRITZ!Portal</td>
-                <td>v{version || '-'}</td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Seriennummer</td>
-                <td style={{ fontFamily: 'monospace' }}>{deviceInfo?.NewSerialNumber || '-'}</td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Laufzeit</td>
-                <td>{upTime}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <table>
+          <tbody>
+            <tr>
+              <td style={{ width: 200, color: 'var(--text-secondary)' }}>{t('system.model')}</td>
+              <td>{deviceInfo?.NewModelName || '—'}</td>
+            </tr>
+            <tr>
+              <td style={{ color: 'var(--text-secondary)' }}>{t('system.hardware')}</td>
+              <td>{deviceInfo?.NewHardwareVersion || '—'}</td>
+            </tr>
+            <tr>
+              <td style={{ color: 'var(--text-secondary)' }}>{t('system.portal')}</td>
+              <td>v{version || '—'}</td>
+            </tr>
+            <tr>
+              <td style={{ color: 'var(--text-secondary)' }}>{t('system.serial')}</td>
+              <td className="device-mac">{deviceInfo?.NewSerialNumber || '—'}</td>
+            </tr>
+            <tr>
+              <td style={{ color: 'var(--text-secondary)' }}>{t('system.uptime')}</td>
+              <td>{upTime}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div className="action-grid">
         <div className="action-card">
-          <div className="action-icon" style={{ background: 'rgba(239,68,68,0.1)' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-            </svg>
-          </div>
-          <h4>Neustart</h4>
-          <p>Starten Sie Ihre FritzBox neu. Die Verbindung wird währenddessen kurzzeitig unterbrochen.</p>
+          <h4>{t('system.reboot')}</h4>
+          <p>{t('system.reboot.desc')}</p>
           <button className="btn btn-danger" onClick={handleReboot} disabled={rebooting}>
-            {rebooting ? 'Startet neu...' : 'Jetzt neustarten'}
+            {rebooting ? t('system.reboot.busy') : t('system.reboot.btn')}
           </button>
         </div>
 
         <div className="action-card">
-          <div className="action-icon" style={{ background: 'rgba(59,130,246,0.1)' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          </div>
-          <h4>Firmware Update</h4>
-          <p>Prüfen Sie auf verfügbare Firmware-Updates für Ihre FritzBox.</p>
+          <h4>{t('system.firmware')}</h4>
+          <p>{t('system.firmware.desc')}</p>
           <button className="btn btn-primary" onClick={() => window.open(fritzUrl, '_blank')}>
-            In FritzBox öffnen
+            {t('system.firmware.btn')}
           </button>
         </div>
 
         <div className="action-card">
-          <div className="action-icon" style={{ background: 'rgba(34,197,94,0.1)' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
-            </svg>
-          </div>
-          <h4>FritzBox Webinterface</h4>
-          <p>Öffnen Sie das originale FritzBox Webinterface für erweiterte Einstellungen.</p>
+          <h4>{t('system.webui')}</h4>
+          <p>{t('system.webui.desc')}</p>
           <button className="btn btn-outline" onClick={() => window.open(fritzUrl, '_blank')}>
-            Öffnen
+            {t('system.webui.btn')}
           </button>
         </div>
       </div>
 
       {haSettings && (
-        <div className="card" style={{ marginTop: 24 }}>
+        <div className="card" style={{ marginTop: 18 }}>
           <div className="card-header">
-            <h3 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
-              </svg>
-              Home Assistant Sensoren
-            </h3>
+            <h3>{t('system.ha')}</h3>
           </div>
           <div className="card-body">
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
-              FRITZ!Portal sendet Gerätewerte automatisch via MQTT Discovery an Home Assistant.
-              Die Entitäten erscheinen unter <code style={{ background: 'var(--bg-primary)', padding: '1px 6px', borderRadius: 4, fontSize: 12 }}>sensor.fritzportal_*</code> und können direkt auf dem HA-Dashboard verwendet werden.
-              Falls kein MQTT-Broker vorhanden ist, kann der REST-API Fallback aktiviert werden.
+            <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 13, marginBottom: 18, lineHeight: 1.6, letterSpacing: 0.2 }}>
+              {t('system.ha.desc').split('{code}').map((part, idx, arr) => (
+                <span key={idx}>
+                  {part}
+                  {idx < arr.length - 1 && <code>sensor.fritzportal_*</code>}
+                </span>
+              ))}
             </p>
 
             {/* Status-Anzeige */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              marginBottom: 20, padding: '10px 14px',
-              borderRadius: 8, border: '1px solid var(--border)',
-              background: !haSettings.ha_available ? 'rgba(107,114,128,0.06)' : (haSettings.ha_sensors || haSettings.mqtt_available) ? 'rgba(34,197,94,0.06)' : 'rgba(245,158,11,0.06)',
+              marginBottom: 18, padding: '10px 14px',
+              borderRadius: 'var(--radius)', border: '1px solid var(--border)',
+              background: 'var(--bg-elevated)',
+              fontFamily: 'var(--font-mono)',
             }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: !haSettings.ha_available ? '#6b7280' : (haSettings.ha_sensors || haSettings.mqtt_available) ? '#22c55e' : '#f59e0b', flexShrink: 0 }} />
-              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: !haSettings.ha_available ? 'var(--text-muted)' : (haSettings.ha_sensors || haSettings.mqtt_available) ? 'var(--success)' : 'var(--warning)', flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
                 {!haSettings.ha_available
-                  ? 'Kein SUPERVISOR_TOKEN – Sensor-Push nur im HA Add-on verfügbar'
+                  ? t('system.ha.status.noToken')
                   : haSettings.ha_sensors
-                  ? 'REST-API aktiv – Sensoren werden via HA REST-API an Home Assistant gesendet'
+                  ? t('system.ha.status.rest')
                   : haSettings.mqtt_available
-                  ? 'MQTT Discovery aktiv – Sensoren werden via MQTT an Home Assistant gesendet'
-                  : 'MQTT nicht erreichbar – REST-API Fallback aktivieren um Sensoren zu übertragen'}
+                  ? t('system.ha.status.mqtt')
+                  : t('system.ha.status.none')}
               </span>
             </div>
 
             {/* REST-API Fallback ein/aus */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
               <div>
-                <div style={{ fontWeight: 500, fontSize: 14 }}>REST-API Fallback</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>Sensoren über HA REST-API senden wenn kein MQTT-Broker verfügbar ist</div>
+                <div style={{ fontWeight: 500, fontSize: 14, fontFamily: 'var(--font-mono)' }}>{t('system.ha.rest')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>{t('system.ha.rest.desc')}</div>
               </div>
               <button
                 onClick={() => setHaSettings(s => s ? { ...s, ha_sensors: !s.ha_sensors } : s)}
                 style={{
                   width: 46, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
-                  background: haSettings.ha_sensors ? '#22c55e' : '#6b7280',
+                  background: haSettings.ha_sensors ? 'var(--success)' : 'var(--text-muted)',
                   position: 'relative', transition: 'background 0.2s', flexShrink: 0,
                 }}
                 title={haSettings.ha_sensors ? 'Deaktivieren' : 'Aktivieren'}
@@ -250,8 +240,8 @@ export default function System({ sid }: SystemProps) {
             {/* Systemsensoren-Intervall */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
               <div>
-                <div style={{ fontWeight: 500, fontSize: 14 }}>Intervall: Systemsensoren</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>CPU, RAM, Temperatur, Geräte online, freie IPs, Download, Upload</div>
+                <div style={{ fontWeight: 500, fontSize: 14, fontFamily: 'var(--font-mono)' }}>{t('system.ha.intervalSys')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>{t('system.ha.intervalSys.desc')}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                 <input
@@ -260,15 +250,15 @@ export default function System({ sid }: SystemProps) {
                   onChange={e => setHaSettings(s => s ? { ...s, ha_sensors_interval: parseInt(e.target.value) || 60 } : s)}
                   style={{ width: 72, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 14, textAlign: 'right' }}
                 />
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Sek.</span>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{t('system.unit.sec')}</span>
               </div>
             </div>
 
             {/* Traffic-Intervall */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 0' }}>
               <div>
-                <div style={{ fontWeight: 500, fontSize: 14 }}>Intervall: Traffic-Sensoren</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>Heute, Gestern, Aktuelle Woche, Aktueller Monat, Vormonat (Download & Upload)</div>
+                <div style={{ fontWeight: 500, fontSize: 14, fontFamily: 'var(--font-mono)' }}>{t('system.ha.intervalTraffic')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>{t('system.ha.intervalTraffic.desc')}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                 <input
@@ -277,21 +267,21 @@ export default function System({ sid }: SystemProps) {
                   onChange={e => setHaSettings(s => s ? { ...s, ha_sensors_traffic_interval: parseInt(e.target.value) || 300 } : s)}
                   style={{ width: 72, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 14, textAlign: 'right' }}
                 />
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Sek.</span>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{t('system.unit.sec')}</span>
               </div>
             </div>
 
             {/* Debug-Logging */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderTop: '1px solid var(--border)' }}>
               <div>
-                <div style={{ fontWeight: 500, fontSize: 14 }}>Debug-Logging</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>Alle API-Anfragen (data.lua, SOAP) im Add-on-Protokoll ausgeben – hilfreich zur Fehlerdiagnose</div>
+                <div style={{ fontWeight: 500, fontSize: 14, fontFamily: 'var(--font-mono)' }}>{t('system.ha.debug')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>{t('system.ha.debug.desc')}</div>
               </div>
               <button
                 onClick={() => setHaSettings(s => s ? { ...s, debug_logging: !s.debug_logging } : s)}
                 style={{
                   width: 46, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
-                  background: haSettings.debug_logging ? '#f59e0b' : '#6b7280',
+                  background: haSettings.debug_logging ? 'var(--warning)' : 'var(--text-muted)',
                   position: 'relative', transition: 'background 0.2s', flexShrink: 0,
                 }}
                 title={haSettings.debug_logging ? 'Deaktivieren' : 'Aktivieren'}
@@ -308,14 +298,14 @@ export default function System({ sid }: SystemProps) {
             {/* Speichern */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
               <button className="btn btn-primary" onClick={handleHaSave} disabled={haSaving}>
-                {haSaving ? 'Wird gespeichert…' : 'Einstellungen speichern'}
+                {haSaving ? t('system.ha.saving') : t('system.ha.save')}
               </button>
               {haMessage && (
-                <span style={{ fontSize: 13, color: haMessageOk ? '#22c55e' : '#ef4444' }}>{haMessage}</span>
+                <span style={{ fontSize: 13, color: haMessageOk ? 'var(--success)' : 'var(--danger)', fontFamily: 'var(--font-mono)' }}>{haMessage}</span>
               )}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 10, opacity: 0.7 }}>
-              Änderungen werden sofort angewendet und in die Add-on-Konfiguration übernommen – kein Neustart nötig.
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10, fontFamily: 'var(--font-mono)' }}>
+              {t('system.ha.applied')}
             </div>
           </div>
         </div>

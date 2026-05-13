@@ -54,7 +54,7 @@ export default function Network({ sid }: NetworkProps) {
     }
   };
 
-  if (loading) return <div className="loading"><div className="spinner" /></div>;
+  if (loading) return <div className="loading"><span className="terminal-cursor">$ loading<span className="blink">▮</span></span></div>;
 
   const tabs: { id: NetworkTab; label: string }[] = [
     { id: 'overview', label: '\u00dcbersicht' },
@@ -213,7 +213,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
       <div className="card">
         <div className="card-header"><h3>Netzwerk-Topologie</h3></div>
         <div className="card-body" style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-          <div className="spinner" />
+          <span className="terminal-cursor">$ loading<span className="blink">▮</span></span>
         </div>
       </div>
     );
@@ -247,22 +247,22 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
   const legendDot = (color: string) => ({ width: 12, height: 10, borderRadius: 3, background: color, display: 'inline-block' });
   const legend = showHostsView ? (
     <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#06b6d4')} /> Fritz!Box</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#3b82f6')} /> LAN</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#10b981')} /> WLAN</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#f59e0b')} /> Infrastruktur</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('var(--info-cyan)')} /> Fritz!Box</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('var(--accent)')} /> LAN</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('var(--success)')} /> WLAN</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('var(--warning)')} /> Infrastruktur</span>
     </div>
   ) : (
     <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-secondary)', alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#06b6d4')} /> Master</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#f59e0b')} /> Infrastruktur</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#3b82f6')} /> LAN-Client</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('#10b981')} /> WLAN-Client</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('var(--info-cyan)')} /> Master</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('var(--warning)')} /> Infrastruktur</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('var(--accent)')} /> LAN-Client</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={legendDot('var(--success)')} /> WLAN-Client</span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#3b82f6" strokeWidth="2" /></svg> LAN
+        <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="var(--accent)" strokeWidth="2" /></svg> LAN
       </span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#10b981" strokeWidth="2" strokeDasharray="6 3" /></svg> WLAN
+        <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="var(--success)" strokeWidth="2" strokeDasharray="6 3" /></svg> WLAN
       </span>
     </div>
   );
@@ -274,7 +274,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h3>Netzwerk-Topologie</h3>{toggleBtn}</div>
           {legend}
         </div>
-        <div className="card-body" style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" /></div>
+        <div className="card-body" style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><span className="terminal-cursor">$ loading<span className="blink">▮</span></span></div>
       </div>
     );
   }
@@ -305,8 +305,8 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
   }
 
   const roleMeta = (node: MeshNode) => {
-    if (node.role === 'master') return { label: 'Fritz!Box', color: '#06b6d4' };
-    if (node.role === 'satellite' || isInfraDevice(node.name)) return { label: 'Infrastruktur', color: '#f59e0b' };
+    if (node.role === 'master') return { label: 'Fritz!Box', color: 'var(--info-cyan)' };
+    if (node.role === 'satellite' || isInfraDevice(node.name)) return { label: 'Infrastruktur', color: 'var(--warning)' };
     return { label: 'Client', color: 'var(--text-primary)' };
   };
   const tooltipEl = tooltip && (
@@ -388,9 +388,9 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 24, padding: '12px 16px 0', fontSize: 13, color: 'var(--text-secondary)' }}>
           <span>{totalClients} Geräte online</span>
-          <span style={{ color: '#3b82f6' }}>● {lanCount} LAN</span>
-          <span style={{ color: '#10b981' }}>● {wlanCount} WLAN</span>
-          {infraCount > 0 && <span style={{ color: '#f59e0b' }}>● {infraCount} Infrastruktur</span>}
+          <span style={{ color: 'var(--accent)' }}>● {lanCount} LAN</span>
+          <span style={{ color: 'var(--success)' }}>● {wlanCount} WLAN</span>
+          {infraCount > 0 && <span style={{ color: 'var(--warning)' }}>● {infraCount} Infrastruktur</span>}
           <button onClick={() => setShowNames(v => !v)} style={{
             marginLeft: 8, padding: '2px 10px', fontSize: 12, borderRadius: 6,
             border: '1px solid var(--border)', cursor: 'pointer',
@@ -408,8 +408,8 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
           >
             <defs>
               <radialGradient id="glow-master-r" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
+                <stop offset="0%" stopColor="var(--info-cyan)" stopOpacity="0.4" />
+                <stop offset="100%" stopColor="var(--info-cyan)" stopOpacity="0" />
               </radialGradient>
             </defs>
 
@@ -429,7 +429,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
               const nx = cx + ring.radius * Math.cos(angle);
               const ny = cy + ring.radius * Math.sin(angle);
               const isHovered = hoveredUid === c.node.uid;
-              const color = c.isInfra ? '#f59e0b' : c.isWlan ? '#10b981' : '#3b82f6';
+              const color = c.isInfra ? 'var(--warning)' : c.isWlan ? 'var(--success)' : 'var(--accent)';
               const dash = c.isWlan ? '6 3' : '0';
               return (
                 <line key={`l-${i}`} x1={cx} y1={cy} x2={nx} y2={ny}
@@ -444,7 +444,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
             {/* Master-Knoten */}
             <g transform={`translate(${cx},${cy})`}>
               <circle cx={0} cy={0} r={masterR + 14} fill="url(#glow-master-r)" />
-              <circle cx={0} cy={0} r={masterR} fill="#0e7490" stroke="#06b6d4" strokeWidth="2.5" />
+              <circle cx={0} cy={0} r={masterR} fill="#0e7490" stroke="var(--info-cyan)" strokeWidth="2.5" />
               <text y={-4} textAnchor="middle" fontSize="9" fill="white" fontWeight="600">
                 {masterNode.name.length > 12 ? masterNode.name.slice(0, 10) + '…' : masterNode.name}
               </text>
@@ -467,7 +467,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
               const nx = cx + ring.radius * Math.cos(angle);
               const ny = cy + ring.radius * Math.sin(angle);
               const isHovered = hoveredUid === c.node.uid;
-              const color = c.isInfra ? '#f59e0b' : c.isWlan ? '#10b981' : '#3b82f6';
+              const color = c.isInfra ? 'var(--warning)' : c.isWlan ? 'var(--success)' : 'var(--accent)';
               const fillColor = c.isInfra ? '#78350f' : c.isWlan ? '#065f46' : '#1e3a5f';
               return (
                 <g key={c.node.uid}
@@ -584,11 +584,11 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
   const yOf = (n: TreeNode) => PAD_Y + n.rowIdx * ROW_H;
 
   const styleFor = (n: TreeNode) => {
-    if (n === rootTree || n.role === 'master') return { fill: '#0e4d6b', stroke: '#06b6d4' };
-    if (isInfraNode(n))                         return { fill: '#783d12', stroke: '#f59e0b' };
+    if (n === rootTree || n.role === 'master') return { fill: '#0e4d6b', stroke: 'var(--info-cyan)' };
+    if (isInfraNode(n))                         return { fill: '#783d12', stroke: 'var(--warning)' };
     return isWlanType(n.linkType)
-      ? { fill: '#064e3b', stroke: '#10b981' }
-      : { fill: '#1e3a5f', stroke: '#3b82f6' };
+      ? { fill: '#064e3b', stroke: 'var(--success)' }
+      : { fill: '#1e3a5f', stroke: 'var(--accent)' };
   };
 
   const infraCount = flat.filter(n => n !== rootTree && isInfraNode(n)).length;
@@ -602,7 +602,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 24, padding: '10px 16px 2px', fontSize: 13, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
         <span>{flat.length} Geräte</span>
-        {infraCount > 0 && <span style={{ color: '#f59e0b' }}>● {infraCount} Infrastruktur</span>}
+        {infraCount > 0 && <span style={{ color: 'var(--warning)' }}>● {infraCount} Infrastruktur</span>}
         <span style={{ color: 'var(--text-primary)' }}>● {clientCount} Clients</span>
       </div>
       <div className="card-body" style={{ padding: 0, position: 'relative', overflow: 'auto' }}
@@ -626,7 +626,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
               eingefärbt nach Verbindungstyp (LAN blau / WLAN grün gestrichelt) */}
           {flat.flatMap(parent => parent.children.map(child => {
             const wlan = isWlanType(child.linkType);
-            const color = wlan ? '#10b981' : '#3b82f6';
+            const color = wlan ? 'var(--success)' : 'var(--accent)';
             const dash = wlan ? '5 3' : '0';
             const x1 = xOf(parent) + CONNECTOR_OFF;
             const x2 = xOf(child);
@@ -650,7 +650,7 @@ function MeshTopology({ meshData, loading, sid }: { meshData: any; loading: bool
             const isHovered = hoveredUid === n.uid;
             const isRoot = n === rootTree;
             const connLabel = isWlanType(n.linkType) ? 'WLAN' : 'LAN';
-            const connColor = isWlanType(n.linkType) ? '#10b981' : '#3b82f6';
+            const connColor = isWlanType(n.linkType) ? 'var(--success)' : 'var(--accent)';
             return (
               <g key={n.uid}
                 transform={`translate(${xOf(n)},${yOf(n)})`}
@@ -753,7 +753,7 @@ function WANSettings({ wanInfo }: { wanInfo: any }) {
 
 function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
   const bandLabels = ['2.4 GHz', '5 GHz', '6 GHz / Gast'];
-  const bandColors = ['#3b82f6', '#22c55e', '#f59e0b'];
+  const bandColors = ['var(--accent)', 'var(--success)', 'var(--warning)'];
   const bandBg = ['rgba(59,130,246,0.1)', 'rgba(34,197,94,0.1)', 'rgba(245,158,11,0.1)'];
   const headers = { 'X-Fritz-SID': sid };
 
@@ -839,7 +839,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
                   padding: '6px 14px',
                   borderRadius: 20,
                   background: isEnabled ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                  color: isEnabled ? '#22c55e' : '#ef4444',
+                  color: isEnabled ? 'var(--success)' : 'var(--danger)',
                   fontSize: 13,
                   fontWeight: 600,
                 }}>
@@ -865,7 +865,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
                 </div>
                 <div style={{ background: bg, borderRadius: 10, padding: 16 }}>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Status</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: isEnabled ? '#22c55e' : '#ef4444' }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: isEnabled ? 'var(--success)' : 'var(--danger)' }}>
                     {isEnabled ? 'Verbunden' : 'Getrennt'}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{w.NewStatus || '-'}</div>
@@ -935,7 +935,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
                   <div style={{
                     marginTop: 8, fontSize: 13, padding: '6px 10px', borderRadius: 6,
                     background: messages[wlanIdx].startsWith('Fehler') ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
-                    color: messages[wlanIdx].startsWith('Fehler') ? '#ef4444' : '#22c55e',
+                    color: messages[wlanIdx].startsWith('Fehler') ? 'var(--danger)' : 'var(--success)',
                   }}>
                     {messages[wlanIdx]}
                   </div>
