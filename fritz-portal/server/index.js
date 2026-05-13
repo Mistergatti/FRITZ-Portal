@@ -165,6 +165,21 @@ const trafficHistory = { down: [], up: [] };
 // ── Eco-Stats history für Dashboard-Popovers (CPU/RAM/Temp, 1h, alle 10 Sekunden) ──
 const ecoHistory = { cpu: [], ram: [], temp: [] };
 
+// "Load average" Stil: 1/5/15-Minuten-Mittel der CPU-Auslastung
+// CPU-% / 100 → 0..1+ analog zum Unix-Loadavg-Display.
+function computeLoadAvg() {
+  const now = Date.now();
+  const windows = [60_000, 5 * 60_000, 15 * 60_000];
+  const calc = (windowMs) => {
+    const cutoff = now - windowMs;
+    const pts = ecoHistory.cpu.filter(p => p.time >= cutoff);
+    if (pts.length === 0) return 0;
+    const avg = pts.reduce((s, p) => s + p.value, 0) / pts.length;
+    return Math.round(avg) / 100;
+  };
+  return { load1: calc(windows[0]), load5: calc(windows[1]), load15: calc(windows[2]) };
+}
+
 async function collectEcoHistory(session) {
   const webSid = await getCachedWebSid(session);
   if (!webSid) return;
@@ -841,7 +856,7 @@ app.get('/api/fritz/eco-stats', async (req, res) => {
   // 15 s; mit 30 s deckt jeder eingehende Request einen Tick ab und der On-Demand-Pfad
   // wird zur reinen Notlösung, falls der Collector noch nie gelaufen ist.
   const cached = getCached('eco-stats', 30000);
-  if (cached) return res.json(cached);
+  if (cached) return res.json({ ...cached, ...computeLoadAvg() });
   // Letzter Strohhalm: wenn der On-Demand-Pfad gleich 0/0/0 zurückgeben würde,
   // bevorzugen wir den jüngsten Eintrag aus dem ecoHistory-Buffer (wird vom
   // Collector gefüllt, der zuverlässiger arbeitet als der On-Demand-Pfad).
@@ -858,7 +873,7 @@ app.get('/api/fritz/eco-stats', async (req, res) => {
   };
   try {
     const webSid = await getCachedWebSid(session);
-    if (!webSid) return res.json(lastFromHistory() || { cpu: 0, ram: 0, cpu_temp: 0 });
+    if (!webSid) return res.json({ ...(lastFromHistory() || { cpu: 0, ram: 0, cpu_temp: 0 }), ...computeLoadAvg() });
 
     const pages = ['home', 'eco', 'ecoStat', 'overview', 'system', 'sysStat'];
     for (const page of pages) {
@@ -891,15 +906,15 @@ app.get('/api/fritz/eco-stats', async (req, res) => {
           if (cpu > 0 || ram > 0 || cpu_temp > 0) {
             const result = { cpu, ram, cpu_temp };
             setCached('eco-stats', result);
-            return res.json(result);
+            return res.json({ ...result, ...computeLoadAvg() });
           }
         }
       } catch {}
     }
-    return res.json(lastFromHistory() || { cpu: 0, ram: 0, cpu_temp: 0 });
+    return res.json({ ...(lastFromHistory() || { cpu: 0, ram: 0, cpu_temp: 0 }), ...computeLoadAvg() });
   } catch (err) {
     console.error('EcoStats error:', err.message);
-    return res.json(lastFromHistory() || { cpu: 0, ram: 0, cpu_temp: 0 });
+    return res.json({ ...(lastFromHistory() || { cpu: 0, ram: 0, cpu_temp: 0 }), ...computeLoadAvg() });
   }
 });
 

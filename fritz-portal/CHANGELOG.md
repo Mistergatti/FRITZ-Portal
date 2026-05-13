@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.4.2
+
+- Neu (UI, Redesign): Komplettes visuelles Refresh auf das **TERMINAL.OS**-Design (Slate · Blue) – dichtes, technisches CLI/Hacker-Layout. Harte 1‑px‑Linien statt weicher Schatten, fast quadratische Ecken (3 px) statt 12 px, 3‑px‑Corner‑Ticks (`┌ ┐ └ ┘`) auf jeder Stat‑Kachel, ASCII‑Ornamentik (`┃`, `──`, `●`, `▰`) sparsam als Strukturhilfe.
+- Neu (Typografie): JetBrains Mono für alle Daten/Labels, Inter Tight für Hauptnavigation und Headlines – per `<link>` im `index.html` von Google Fonts eingebunden; Fallback auf IBM Plex Mono / ui‑monospace.
+- Neu (Tokens, src/index.css): Beide Themes komplett neu (Dark `#171b22`/`#1a1f28` und Light `#f5f6f8`/`#ffffff`). Ein einziger Blau‑Akzent (`#5aa6ff` dark / `#2b6fd9` light) abgeleitet aus dem Logo; muted Status‑Farben (success/warning/danger/info‑cyan/info‑pink). `--radius` 12 → 3 px, `--shadow` durchgängig `none`. Alte Inline‑Hex‑Werte (`#3b82f6`, `#22c55e`, …) in `Network.tsx` und allen Pages auf CSS‑Variablen umgestellt.
+- Neu (Header): `Header.tsx` neu geschrieben – 28×28 Gradient‑`F!`‑Mark, Wordmark `fritz!portal` (Inter Tight 600, mit blauem `!`) plus Versions‑Suffix in Mono, Sans‑serif Navigation in Mixed Case (Dashboard, Geräte, …), aktiver Tab als dim‑accent‑Pill. Theme‑Toggle als `◐ DARK / ◐ LIGHT`‑Pill in Mono.
+- Neu (StatusLine): neue Komponente `src/components/StatusLine.tsx` als zweite sticky Bar direkt unter dem Header. Zeigt `● SID OK`, `UPTIME 14d 03:22`, `FW <Version>`, `LOAD … / … / …`, `WAN <IPv4>` und rechts eine Live‑Uhr `13.05.26  14:08:42 ● REC`. Ab 900 px Breite werden LOAD/WAN/Clock automatisch ausgeblendet.
+- Neu (LOAD‑Anzeige, Backend): `/api/fritz/eco-stats` liefert zusätzlich `load1`, `load5`, `load15` – berechnet aus `ecoHistory.cpu` als 1/5/15‑Minuten‑Mittel der CPU‑Auslastung, normalisiert auf 0..1 (Linux‑Loadavg‑Stil, z. B. `0.23 / 0.41 / 0.18`). Die Werte bauen sich automatisch auf, sobald genug Datenpunkte gesammelt sind.
+- Neu (Wiederverwendbare Primitive): `src/components/TerminalPanel.tsx` (Box mit `┃ TITLE ── subtitle`‑Kopfzeile + optionalem Footer) und `src/components/StatTile.tsx` (Kachel mit Corner‑Ticks, optionaler SVG‑Sparkline und Hint/Progress‑Slot).
+- Neu (Dashboard): 6‑spaltiges Stat‑Grid (MODELL / CPU / RAM / TEMP / HOSTS / IP POOL) mit live tracked SVG‑Sparklines (60 Punkte). THROUGHPUT.LIVE‑Panel (gestyltes Recharts: 1,6‑px‑Strokes, gestrichelte Grid‑Linien `stroke-dasharray="2 5"`, gradient Fills 18 % → 0 %, mono‑Achsen, kein dot/animation) mit DOWN/UP‑Legend‑Chips und MONTH/SAMPLE‑Footer. HOSTS.ACTIVE‑Panel als kompakte monospace Liste mit IP‑Tail (`.24`), LINK‑Tag und Status‑Dot.
+- Neu (Eco‑History‑Modal): wird im neuen `.modal-card`‑Stil (1‑px‑Rand, kein Radius über 3 px, Mono‑`[ ✕ ]`‑Close) gerendert; Modal‑Linien‑Charts angepasst auf die neue Achsen‑ und Tooltip‑Optik.
+- Neu (Login/Loading‑Screen): redesigned als `AUTH ── fritz.box`‑Panel – Gradient‑`F!`‑Logo, Mono‑Eingabefelder, `$ login --user fritz`‑Buttons, blinkender Terminal‑Cursor `$ loading▮` ersetzt globalen Spinner.
+- Neu (Footer): persistente Command‑Hint‑Bar am Seitenende mit Tastatur‑Hints (`↑↓ navigate / enter open / / search`) und aktuell aktivem Theme.
+- Neu (i18n): Wörterbuch in `src/lib/i18n.tsx` (aus v1.3.9) um die neuen Redesign-Strings ergänzt (Status‑Slots, Dashboard‑Tile‑Labels, Panel‑Titel, Command‑Hint, Modal‑Texte). Die DE/EN‑Pill im Header bleibt funktional und schaltet zwischen den Sprachen.
+- Fix (Spinner): alle Vorkommen des CSS‑Spinners (Dashboard, DeviceList, DeviceDetail, Network, Traffic, Telefonie, SmartHome, System) durch den blinkenden Cursor ersetzt – einheitlicher Loading‑State über alle Seiten.
+- Fix (Stat‑Card Migration): Stat‑Cards mit deko‑Icons in Geräte‑, Traffic‑ und Dashboard‑Seiten durch `StatTile` mit Corner‑Ticks und Akzent‑Variablen ersetzt; die SVG‑Icons der alten Stat‑Cards sind via `display: none` deaktiviert.
+- Fix (Tabellen): globaler Stil (`thead th`, `tbody td`) auf mono, dashed Header‑Border, kleinere Padding (10 px / 9 px) und 12.5 px Body‑Font umgestellt – konsistent über alle Pages.
+- Fix (Buttons/Forms): `.btn`, `.btn-primary`, `.btn-outline`, `.btn-danger`, `.form-group input/select/textarea` neu definiert – mono, 13 px, 3‑px‑Radius, fokussierter Input bekommt 1‑px‑Accent‑Ring statt 3‑px‑RGB‑Glow.
+- Fix (Responsive): Stat‑Grid bricht ab 1200 px auf 3 Spalten, ab 600 px auf 2; Header collapsed unter 768 px (kleinere Padding/Font); StatusLine clipped LOAD/WAN/Clock unter 900 px.
+
 ## 1.4.1
 
 - Fix (#25, Anrufliste): Anruf-Typen waren vertauscht – Typ 2 ist „Verpasst", Typ 3 ist „Ausgehend" (laut AVM-Call-XML). UI-Mapping, Filter-Buttons und das Legacy-Feld `number` (Caller/Called-Auswahl) werden korrigiert; zusätzlich wird Typ 10 als „Abgewiesen" sichtbar.

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import { useI18n } from '../lib/i18n';
 
 interface LoginProps {
   onLogin: (sid: string) => void;
@@ -16,6 +17,7 @@ function loadSaved() {
 }
 
 export default function Login({ onLogin }: LoginProps) {
+  const { t } = useI18n();
   const saved = loadSaved();
   const [username, setUsername] = useState(saved?.username ?? '');
   const [password, setPassword] = useState(saved?.password ?? '');
@@ -58,10 +60,15 @@ export default function Login({ onLogin }: LoginProps) {
   return (
     <div className="login-container">
       <div className="login-card">
+        <div className="login-head">
+          <span className="title">AUTH</span>
+          <span>── {host || 'fritz.box'}</span>
+        </div>
+        <div className="login-body">
         <div className="logo">
-          <div className="icon"></div>
-          <h1>FRITZ!Portal</h1>
-          <p>Melden Sie sich mit Ihren FRITZ!Box Zugangsdaten an</p>
+          <div className="icon" />
+          <h1>fritz<span className="bang">!</span>portal</h1>
+          <p>$ login --user fritz</p>
         </div>
         {error && <div className="error-message">{error}</div>}
         <form onSubmit={handleSubmit}>
@@ -106,9 +113,10 @@ export default function Login({ onLogin }: LoginProps) {
             <label htmlFor="remember" style={{ margin: 0, cursor: 'pointer' }}>Zugangsdaten merken</label>
           </div>
           <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Verbinden...' : 'Anmelden'}
+            {loading ? '$ verbinden…' : '$ anmelden'}
           </button>
         </form>
+        </div>
       </div>
     </div>
   );
