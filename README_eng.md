@@ -15,8 +15,13 @@
 </p>
 
 <p align="center">
-  <img src="fritz-portal/docs/images/screenshot.png" alt="FRITZ!Portal Screenshot" width="800"/>  
-  <img src="fritz-portal/docs/images/traffic.png" alt="FRITZ!Portal traffic" width="800"/> <img src="fritz-portal/docs/images/network.png" alt="FRITZ!Portal network" width="800"/>
+  <img src="fritz-portal/docs/images/screenshot-fritzportal-lite.png" alt="FRITZ!Portal Screenshot" width="800"/>  
+  <img src="fritz-portal/docs/images/screenshot-fritzportal-dark.png" alt="FRITZ!Portal traffic" width="800"/> 
+  <img src="fritz-portal/docs/images/fritzportal-devices.png" alt="FRITZ!Portal network" width="800"/>
+  <img src="fritz-portal/docs/images/fritzportal-device.png" alt="FRITZ!Portal network" width="800"/>
+  <img src="fritz-portal/docs/images/fritzportal-mesh.png" alt="FRITZ!Portal network" width="800"/>
+  <img src="fritz-portal/docs/images/fritzportal-telefon.png" alt="FRITZ!Portal network" width="800"/>
+  <img src="fritz-portal/docs/images/fritzportal-traffic.png" alt="FRITZ!Portal network" width="800"/>
 </p>
 
 ---
@@ -82,6 +87,25 @@
 > **MQTT Discovery:** FRITZ!Portal **always sends sensor data via MQTT** to Home Assistant automatically. All sensors are registered as a single **„FRITZ!Portal"** device in the HA device overview, where they can be individually renamed, categorised and used on dashboards.
 >
 > **No MQTT broker available?** Enable the **REST API fallback** in the app configuration (`ha_sensors: true`) or directly in the FRITZ!Portal GUI. Sensors will then appear as individual entities under *Settings → Entities*. To avoid duplicate entities, only one method should be active at a time.
+>
+---
+
+## 🖥️ Compatible FRITZ!Box Models
+
+FRITZ!Portal works in principle with all FRITZ!Box models that support TR-064 and `data.lua`.
+The following models have been tested by users and work well:
+
+| Model | Status | Notes |
+|---|---|---|
+| FRITZ!Box 7590 | ✅ Good | Fully supported |
+| FRITZ!Box 7590 AX | ✅ Good | DECT fix since v1.3.8 |
+| FRITZ!Box 7530 | ✅ Good | DSL/PPPoE; mesh view limited (Issue #5) |
+| FRITZ!Box 6690 Cable | ✅ Good | DECT fix since v1.3.8 |
+| FRITZ!Box 6591 Cable | ✅ Good | Fully supported since DHCP fallback via data.lua since v1.2.6 |
+| FRITZ!Box 6490 Cable | ✅ Good | Model detection and IP stats via fallback since v1.2.5 |
+| FRITZ!Box 6860 5G | ⚠️ Under Review | Issues reported (Issue #20) |
+
+> **Note:** Models not listed here may also work – they simply haven't been explicitly tested yet.
 
 ---
 

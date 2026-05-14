@@ -15,6 +15,10 @@ index.html
 electron-main.js
 build-standalone.mjs
 .vscode/settings.json
+.claude/.DS_Store
 ha-addon-fixed/
 /plan.md
 fritz-portal/plan.md
+fritz-portal/docs/.DS_Store
+fritz-portal/.DS_Store
+.DS_Store

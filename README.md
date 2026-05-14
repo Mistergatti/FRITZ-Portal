@@ -14,8 +14,13 @@
 </p>
 
 <p align="center">
-  <img src="fritz-portal/docs/images/screenshot.png" alt="FRITZ!Portal Screenshot" width="800"/>  
-  <img src="fritz-portal/docs/images/traffic.png" alt="FRITZ!Portal traffic" width="800"/> <img src="fritz-portal/docs/images/network.png" alt="FRITZ!Portal network" width="800"/>
+  <img src="fritz-portal/docs/images/screenshot-fritzportal-lite.png" alt="FRITZ!Portal Screenshot" width="800"/>  
+  <img src="fritz-portal/docs/images/screenshot-fritzportal-dark.png" alt="FRITZ!Portal traffic" width="800"/> 
+  <img src="fritz-portal/docs/images/fritzportal-devices.png" alt="FRITZ!Portal network" width="800"/>
+  <img src="fritz-portal/docs/images/fritzportal-device.png" alt="FRITZ!Portal network" width="800"/>
+  <img src="fritz-portal/docs/images/fritzportal-mesh.png" alt="FRITZ!Portal network" width="800"/>
+  <img src="fritz-portal/docs/images/fritzportal-telefon.png" alt="FRITZ!Portal network" width="800"/>
+  <img src="fritz-portal/docs/images/fritzportal-traffic.png" alt="FRITZ!Portal network" width="800"/>
 </p>
 
 ---
@@ -81,6 +86,23 @@
 > **MQTT Discovery:** FRITZ!Portal sendet Sensordaten **immer automatisch via MQTT** an Home Assistant. Alle Sensoren werden dabei als ein gemeinsames **„FRITZ!Portal"**-Gerät in der HA-Geräteübersicht registriert und lassen sich dort individuell benennen, kategorisieren und auf Dashboards verwenden.
 >
 > **Kein MQTT-Broker vorhanden?** Den **REST-API Fallback** in der App-Konfiguration (`ha_sensors: true`) oder direkt in der FRITZ!Portal-GUI aktivieren. Die Sensoren erscheinen dann als einzelne Entitäten unter *Einstellungen → Entitäten*. Um doppelte Entitäten zu vermeiden, sollte immer nur eine Methode aktiv sein.
+>
+---
+
+FRITZ!Portal funktioniert grundsätzlich mit allen Fritz!Box-Modellen, die TR-064 und `data.lua` unterstützen.
+Die folgenden Modelle wurden von Nutzern getestet und laufen gut:
+
+| Modell | Status | Anmerkungen |
+|---|---|---|
+| FRITZ!Box 7590 | ✅ Gut | Vollständig unterstützt |
+| FRITZ!Box 7590 AX | ✅ Gut | DECT-Fix seit v1.3.8 |
+| FRITZ!Box 7530 | ✅ Gut | DSL/PPPoE; Mesh-Ansicht eingeschränkt (Issue #5) |
+| FRITZ!Box 6690 Cable | ✅ Gut | DECT-Fix seit v1.3.8 |
+| FRITZ!Box 6591 Cable | ✅ Gut | Vollständig unterstützt seit DHCP-Fallback via data.lua seit v1.2.6 |
+| FRITZ!Box 6490 Cable | ✅ Gut | Modell-Ermittlung und IP-Stats via Fallback seit v1.2.5 |
+| FRITZ!Box 6860 5G | ⚠️ In Klärung | Probleme gemeldet (Issue #20) |
+
+> **Hinweis:** Modelle, die nicht in dieser Liste stehen, funktionieren möglicherweise ebenfalls – sie wurden nur noch nicht explizit getestet.
 
 ---
 
