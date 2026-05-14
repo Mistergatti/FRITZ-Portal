@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import { getApiCache } from '../App';
 import { useT } from '../lib/i18n';
 
 interface Host {
@@ -18,8 +19,12 @@ interface DeviceDetailProps {
 
 export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
   const t = useT();
-  const [hosts, setHosts] = useState<Host[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Hosts kommen aus dem Cache, der eben auf der Geräte-Seite gefüllt wurde –
+  // dadurch hat DeviceDetail das Gerätedatum sofort und blockt nicht auf
+  // /api/fritz/hosts. Block-Status und DHCP-Reservierung laden im Hintergrund.
+  const cachedHosts: Host[] = getApiCache('hosts') || [];
+  const [hosts, setHosts] = useState<Host[]>(cachedHosts);
+  const [loading, setLoading] = useState(cachedHosts.length === 0);
   const [blocked, setBlocked] = useState(false);
   const [blocking, setBlocking] = useState(false);
   const [message, setMessage] = useState('');
@@ -29,32 +34,63 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
   const [staticDhcp, setStaticDhcp] = useState<{ exists: boolean; ip: string } | null>(null);
   const [staticDhcpInput, setStaticDhcpInput] = useState('');
   const [settingDhcp, setSettingDhcp] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const headers = { 'X-Fritz-SID': sid };
+
+  const handleDeleteDevice = async (host: Host) => {
+    if (host.active) return;
+    if (!confirm(t('„{n}" dauerhaft aus der FRITZ!Box-Geräteliste entfernen?').replace('{n}', host.name || host.mac))) return;
+    setDeleting(true);
+    setMessage('');
+    try {
+      const res = await apiFetch('/api/fritz/device', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ mac: host.mac }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Cache aufräumen, damit die Liste das Gerät nach onBack() nicht mehr zeigt
+        const cur = (window as any).__apiCache?.['hosts']?.data;
+        if (Array.isArray(cur)) {
+          (window as any).__apiCache['hosts'].data = cur.filter((h: Host) => h.mac !== host.mac);
+        }
+        onBack();
+      } else {
+        setMessage(`Fehler: ${data.error || 'Löschen fehlgeschlagen'}`);
+      }
+    } catch {
+      setMessage('Verbindungsfehler');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => { loadDevice(); }, []);
 
   const loadDevice = async () => {
-    try {
-      const hostsRes = await apiFetch('/api/fritz/hosts', { headers });
-      const hostList = await hostsRes.json();
-      setHosts(hostList);
+    // Block-Status und DHCP-Reservierung parallel laden – beides braucht das
+    // andere nicht. Hosts-Liste nur nachholen, falls der Cache leer war.
+    const hostsP = hosts.length === 0
+      ? apiFetch('/api/fritz/hosts', { headers }).then(r => r.json()).then(setHosts).catch(() => {})
+      : Promise.resolve();
 
-      // Aktuellen Sperrstatus laden
-      const blockRes = await apiFetch(`/api/fritz/device/blockstate?mac=${encodeURIComponent(mac)}`, { headers });
-      const blockData = await blockRes.json();
-      setBlocked(blockData.blocked === true);
+    // Bekannte IP aus dem Hosts-Cache als Query-Param mitschicken – spart dem
+    // Server einen kompletten Hosts-Sweep, wenn der Server-Cache abgelaufen ist.
+    const cachedIp = cachedHosts.find((h: Host) => h.mac === mac)?.ip || '';
+    const blockUrl = `/api/fritz/device/blockstate?mac=${encodeURIComponent(mac)}${cachedIp ? `&ip=${encodeURIComponent(cachedIp)}` : ''}`;
+    apiFetch(blockUrl, { headers })
+      .then(r => r.json())
+      .then(d => setBlocked(d.blocked === true))
+      .catch(() => {});
 
-      // DHCP-Reservierung laden
-      const dhcpRes = await apiFetch(`/api/fritz/device/static-dhcp?mac=${encodeURIComponent(mac)}`, { headers });
-      const dhcpData = await dhcpRes.json();
-      setStaticDhcp(dhcpData);
-      setStaticDhcpInput(dhcpData.ip || '');
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    apiFetch(`/api/fritz/device/static-dhcp?mac=${encodeURIComponent(mac)}`, { headers })
+      .then(r => r.json())
+      .then(d => { setStaticDhcp(d); setStaticDhcpInput(d.ip || ''); })
+      .catch(() => {});
+
+    try { await hostsP; } finally { setLoading(false); }
   };
 
   const handleBlock = async () => {
@@ -277,7 +313,7 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
 
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
             <h4 style={{ marginBottom: 12, fontSize: 14 }}>{t('Ger\u00e4tekontrolle')}</h4>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
               <button
                 className={`btn ${blocked ? 'btn-primary' : 'btn-danger'}`}
                 onClick={handleBlock}
@@ -285,9 +321,22 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
               >
                 {blocking ? t('Wird ausgef\u00fchrt...') : blocked ? t('Internet freigeben') : t('Internet sperren')}
               </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => handleDeleteDevice(device)}
+                disabled={deleting || device.active}
+                title={device.active ? t('Nur offline-Ger\u00e4te k\u00f6nnen entfernt werden') : t('Aus FRITZ!Box-Liste entfernen')}
+              >
+                {deleting ? t('Wird entfernt...') : t('Ger\u00e4t entfernen')}
+              </button>
               {blocked && (
                 <span style={{ color: 'var(--danger)', fontSize: 13, fontWeight: 500 }}>
                   {'\u26d4'} {t('Ger\u00e4t ist gesperrt')}
+                </span>
+              )}
+              {device.active && (
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {t('Nur offline-Ger\u00e4te k\u00f6nnen entfernt werden')}
                 </span>
               )}
             </div>
@@ -358,6 +407,7 @@ export default function DeviceDetail({ sid, mac, onBack }: DeviceDetailProps) {
           </p>
         </div>
       </div>
+
     </div>
   );
 }

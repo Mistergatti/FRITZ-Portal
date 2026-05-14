@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import { getApiCache, setApiCache } from '../App';
 import { useT } from '../lib/i18n';
 
 interface TelefonieProps {
@@ -11,9 +12,11 @@ type TelefonieTab = 'dect' | 'calls';
 export default function Telefonie({ sid }: TelefonieProps) {
   const t = useT();
   const [tab, setTab] = useState<TelefonieTab>('dect');
-  const [loading, setLoading] = useState(true);
-  const [calls, setCalls] = useState<any[]>([]);
-  const [dectInfo, setDectInfo] = useState<any>(null);
+  const cachedCalls: any[] | null = getApiCache('calls');
+  const cachedDect: any = getApiCache('dect');
+  const [calls, setCalls] = useState<any[]>(cachedCalls || []);
+  const [dectInfo, setDectInfo] = useState<any>(cachedDect);
+  const [loading, setLoading] = useState(!cachedCalls && !cachedDect);
 
   const headers = { 'X-Fritz-SID': sid };
 
@@ -28,8 +31,12 @@ export default function Telefonie({ sid }: TelefonieProps) {
         apiFetch('/api/fritz/dect', { headers }),
       ]);
 
-      setCalls(await callsRes.json());
-      setDectInfo(await dectRes.json());
+      const callsData = await callsRes.json();
+      const dectData = await dectRes.json();
+      setApiCache('calls', callsData);
+      setApiCache('dect', dectData);
+      setCalls(callsData);
+      setDectInfo(dectData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -127,9 +134,11 @@ function DECTTab({ dectInfo, t }: { dectInfo: any; t: (s: string) => string }) {
                         : h.registered
                           ? t('Standby / Aus')
                           : t('Abgemeldet');
-                    // Akku-Wert > 0 ist ein zusätzliches Lebenszeichen – Punkt grün
-                    const batteryPct = parseInt(String(h.battery || '0'), 10) || 0;
-                    const dotClass = h.connected || h.active || batteryPct > 0 ? 'online' : 'offline';
+                    // Status-Dot: Solange das Handset in der Box-Konfiguration steht
+                    // (registered=true), gilt es als online – auch im Tiefschlaf, wo
+                    // weder NewActive noch Akku zuverlässig sind. Nur abgemeldete
+                    // Geräte zeigen den grauen Offline-Punkt.
+                    const dotClass = h.registered ? 'online' : 'offline';
                     return (
                       <tr key={i}>
                         <td className="device-name">{h.name}</td>

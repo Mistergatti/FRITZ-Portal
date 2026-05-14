@@ -33,6 +33,7 @@ options:
   ha_sensors_interval: 60
   ha_sensors_traffic_interval: 300
   debug_logging: false
+  keep_session_alive: false
 schema:
   fritzbox_host: "str"
   fritzbox_user: "str"
@@ -41,3 +42,4 @@ schema:
   ha_sensors_interval: int
   ha_sensors_traffic_interval: int
   debug_logging: bool
+  keep_session_alive: bool

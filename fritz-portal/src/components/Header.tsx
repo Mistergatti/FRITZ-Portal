@@ -1,5 +1,6 @@
 import { useTheme } from '../hooks/useTheme';
 import { useI18n } from '../lib/i18n';
+import logoUrl from '../logo.png';
 
 type Page = 'dashboard' | 'devices' | 'device-detail' | 'network' | 'traffic' | 'telefonie' | 'smarthome' | 'system';
 
@@ -27,11 +28,8 @@ export default function Header({ currentPage, onNavigate, version = '1.4.2' }: H
   return (
     <header className="header">
       <div className="header-brand">
-        <div className="header-mark">F!</div>
-        <div className="header-wordmark">
-          <span>fritz<span className="bang">!</span>portal</span>
-          <span className="header-version">v{version}</span>
-        </div>
+        <img src={logoUrl} alt="FRITZ!Portal" className="header-logo" />
+        <span className="header-version">v{version}</span>
       </div>
 
       <nav className="header-nav">

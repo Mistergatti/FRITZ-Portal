@@ -40,8 +40,38 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [sortField, setSortField] = useState<'name' | 'status' | 'ip' | 'connection'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [deletingMac, setDeletingMac] = useState<string | null>(null);
+  const [deleteMsg, setDeleteMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const headers = { 'X-Fritz-SID': sid };
+
+  const handleDelete = async (e: React.MouseEvent, host: Host) => {
+    e.stopPropagation();
+    if (host.active) return;
+    if (!confirm(t('„{n}" dauerhaft aus der FRITZ!Box-Geräteliste entfernen?').replace('{n}', host.name || host.mac))) return;
+    setDeletingMac(host.mac);
+    setDeleteMsg(null);
+    try {
+      const res = await apiFetch('/api/fritz/device', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ mac: host.mac }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setHosts(prev => prev.filter(h => h.mac !== host.mac));
+        setApiCache('hosts', hosts.filter(h => h.mac !== host.mac));
+        setDeleteMsg({ kind: 'ok', text: t('Gerät „{n}" entfernt.').replace('{n}', host.name || host.mac) });
+      } else {
+        setDeleteMsg({ kind: 'err', text: data.error || t('Löschen fehlgeschlagen') });
+      }
+    } catch {
+      setDeleteMsg({ kind: 'err', text: t('Verbindungsfehler') });
+    } finally {
+      setDeletingMac(null);
+      setTimeout(() => setDeleteMsg(null), 5000);
+    }
+  };
 
   const handleSort = (field: 'name' | 'status' | 'ip' | 'connection') => {
     if (sortField === field) {
@@ -78,7 +108,9 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
             })
         );
         setHosts(cachedHosts);
-        
+        // Sofort rendern — frische Daten ersetzen den Cache, sobald sie da sind
+        setLoading(false);
+
         if (cachedIpStats) {
           setIpStats(cachedIpStats);
           const minNum = parseInt(cachedIpStats.minAddress?.split('.')[3] || '0', 10);
@@ -241,6 +273,10 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
         </div>
       </div>
 
+      {deleteMsg && (
+        <div className={deleteMsg.kind === 'ok' ? 'success-message' : 'error-message'}>{deleteMsg.text}</div>
+      )}
+
       <div className="card">
         <div className="card-header">
           <h3>{t('Alle Ger\u00e4te')}</h3>
@@ -271,6 +307,7 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                   <th>{t('MAC-Adresse')}</th>
                   <th style={{ cursor: 'pointer' }} onClick={() => handleSort('connection')}>{t('Verbindung')}{getSortIndicator('connection')}</th>
                   <th>{t('Zuletzt online')}</th>
+                  <th style={{ width: 40 }} />
                 </tr>
               </thead>
               <tbody>
@@ -339,11 +376,43 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
                         ? (formatLastActivity(host.lastActivity) || '—')
                         : (formatLastActivity(host.lastActivity) || 'Unbekannt')}
                     </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {!host.active ? (
+                        <button
+                          onClick={e => handleDelete(e, host)}
+                          disabled={deletingMac === host.mac}
+                          title={t('Aus FRITZ!Box-Liste entfernen')}
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid var(--border)',
+                            color: 'var(--text-secondary)',
+                            width: 26, height: 26, borderRadius: 3,
+                            fontFamily: 'var(--font-mono)', fontSize: 14, lineHeight: 1,
+                            cursor: deletingMac === host.mac ? 'default' : 'pointer',
+                            opacity: deletingMac === host.mac ? 0.4 : 1,
+                          }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--danger)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger)'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
+                        >
+                          {deletingMac === host.mac ? '\u2026' : '\u00d7'}
+                        </button>
+                      ) : (
+                        <span
+                          title={t('Nur offline-Ger\u00e4te k\u00f6nnen entfernt werden')}
+                          style={{
+                            display: 'inline-block', width: 26, height: 26, borderRadius: 3,
+                            border: '1px solid var(--border)', opacity: 0.25,
+                            color: 'var(--text-muted)', fontSize: 14, lineHeight: '24px',
+                            textAlign: 'center', fontFamily: 'var(--font-mono)',
+                          }}
+                        >\u00d7</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 32 }}>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 32 }}>
                       {t('Keine Ger\u00e4te gefunden')}
                     </td>
                   </tr>

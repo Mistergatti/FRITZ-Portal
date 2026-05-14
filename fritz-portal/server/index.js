@@ -69,6 +69,7 @@ try {
     if (opts.ha_sensors                  !== undefined && !process.env.HA_SENSORS)                  process.env.HA_SENSORS                  = String(opts.ha_sensors);
     if (opts.ha_sensors_interval          !== undefined && !process.env.HA_SENSORS_INTERVAL)          process.env.HA_SENSORS_INTERVAL          = String(opts.ha_sensors_interval);
     if (opts.ha_sensors_traffic_interval  !== undefined && !process.env.HA_SENSORS_TRAFFIC_INTERVAL)  process.env.HA_SENSORS_TRAFFIC_INTERVAL  = String(opts.ha_sensors_traffic_interval);
+    if (opts.keep_session_alive           !== undefined && !process.env.KEEP_SESSION_ALIVE)            process.env.KEEP_SESSION_ALIVE           = String(opts.keep_session_alive);
     if (opts.debug_logging !== undefined) debugLogging = !!opts.debug_logging;
     console.log('HA Add-on: Fritz!Box-Optionen geladen (' + opts.fritzbox_host + ')' + (debugLogging ? ' [Debug-Logging aktiv]' : ''));
   }
@@ -90,6 +91,21 @@ try {
 
 const app = express();
 app.use(express.json());
+
+// Aktivitäts-Tracker: Bei jeder API-Anfrage `lastUsed` der Session bumpen.
+// Wird vom Background-Collector ausgewertet – ist eine Session länger als 5 min idle
+// und Keep-Session-Alive ist aus, hört der Collector auf, die FRITZ!Box zu pollen.
+// Damit ist die Box wieder „frei" für die HA-eigene Fritz!SmartHome-Integration,
+// sobald niemand das Portal aktiv im Browser offen hat.
+const SESSION_IDLE_MS = 5 * 60 * 1000;
+app.use((req, _res, next) => {
+  if (req.path && req.path.startsWith('/api')) {
+    const sid = req.headers['x-fritz-sid'];
+    const session = sid ? sessions.get(sid) : null;
+    if (session) session.lastUsed = Date.now();
+  }
+  next();
+});
 
 // Serve static frontend files
 const distPath = join(__dirname, '..', 'dist');
@@ -226,6 +242,15 @@ async function collectEcoHistory(session) {
 
 setInterval(async () => {
   for (const [sid, session] of sessions) {
+    // Idle-Skip: Wenn niemand das Portal aktiv benutzt UND keep_session_alive aus ist,
+    // hören wir auf, die FRITZ!Box zu pollen – wichtig damit die HA-eigene
+    // Fritz!SmartHome-Integration den AHA-Endpoint und data.lua ohne Konkurrenz nutzen
+    // kann. Ein neuer API-Call vom Browser hebt den Idle-Status sofort wieder auf
+    // (lastUsed wird in der express-Middleware aktualisiert).
+    if (!keepSessionAlive) {
+      const lastUsed = session.lastUsed || 0;
+      if (Date.now() - lastUsed > SESSION_IDLE_MS) continue;
+    }
     try {
       // Primär: data.lua?page=netMon – dieselbe Quelle, die die Fritz!Box-UI für den Live-Graph
       // nutzt. Liefert pro Sync-Gruppe eine Historie der letzten Sekunden als `ds_bps_curr` /
@@ -274,7 +299,8 @@ setInterval(async () => {
     } catch {}
     try { await collectEcoHistory(session); } catch {}
   }
-}, 15000);
+}, 30000); // 30s-Tick (vorher 15s) – halbiert die FritzBox-Last des Background-Collectors,
+           // ohne dass der Dashboard-Chart spürbar weniger Detail bietet (60 Punkte → 30 min Verlauf).
 
 // Hinweis: Die TTL wird beim *Read* übergeben (nicht beim Write). setCached's drittes
 // Argument wird hier ignoriert. Wer einen Eintrag länger als CACHE_TTL halten will,
@@ -738,7 +764,7 @@ app.get('/api/fritz/auto-session', async (req, res) => {
   }
   try {
     const controlUrls = await discoverControlUrls(host);
-    sessions.set(AUTO_SID, { host, username, password, controlUrls, isAutoSession: true });
+    sessions.set(AUTO_SID, { host, username, password, controlUrls, isAutoSession: true, lastUsed: Date.now() });
     console.log('Auto-session: Created session with SID:', AUTO_SID);
     // WebSID im Hintergrund vorab cachen, damit eco-stats und network-stats sofort bereit sind
     const autoSession = sessions.get(AUTO_SID);
@@ -1067,10 +1093,23 @@ app.get('/api/fritz/device/blockstate', async (req, res) => {
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
   const { mac } = req.query;
   try {
-    const hosts = await getHostsViaSoap(session.host, session.username, session.password, session.controlUrls);
-    const host = hosts.find(h => h.mac === mac);
-    if (!host?.ip) return res.json({ blocked: false });
-    const result = await soapRequest(session.host, 'urn:dslforum-org:service:X_AVM-DE_HostFilter:1', 'GetWANAccessByIP', session.username, session.password, session.controlUrls, { NewIPv4Address: host.ip });
+    // IP des Geräts ermitteln: erst gecachte Hosts (60s TTL), dann optionaler Query-Param,
+    // erst zuletzt SOAP-Sweep. Vorher wurde immer der komplette Hosts-Sweep durchgeführt,
+    // was bei 70 Geräten ~5s gedauert hat und DeviceDetail spürbar verlangsamt hat.
+    let ip = '';
+    const cachedHosts = getCached('hosts', 60000);
+    if (Array.isArray(cachedHosts)) {
+      const host = cachedHosts.find(h => h.mac === mac);
+      if (host?.ip) ip = host.ip;
+    }
+    if (!ip && typeof req.query.ip === 'string' && req.query.ip) ip = req.query.ip;
+    if (!ip) {
+      // Fallback: SOAP-Sweep nur wenn weder Cache noch Query-Param eine IP liefern
+      const hosts = await getHostsViaSoap(session.host, session.username, session.password, session.controlUrls);
+      ip = hosts.find(h => h.mac === mac)?.ip || '';
+    }
+    if (!ip) return res.json({ blocked: false });
+    const result = await soapRequest(session.host, 'urn:dslforum-org:service:X_AVM-DE_HostFilter:1', 'GetWANAccessByIP', session.username, session.password, session.controlUrls, { NewIPv4Address: ip });
     return res.json({ blocked: result.NewDisallow === '1' || result.NewDisallow === 'true' || result.NewWANAccess === 'denied' });
   } catch (err) {
     console.error('Blockstate error:', err.message);
@@ -1186,6 +1225,63 @@ app.post('/api/fritz/device/block', async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error('Block device error:', err.message);
+    return res.json({ success: false, error: err.message });
+  }
+});
+
+// Gerät aus der FRITZ!Box-Hostliste entfernen.
+// Primär TR-064 (`Hosts:1#X_AVM-DE_DeleteHost`, AVM-Erweiterung). Bei Boxen die das
+// nicht implementieren (alte Firmwares) bleibt data.lua als Fallback. Die FRITZ!Box
+// verweigert das Löschen aktiver Geräte – das prüfen wir vorab im Cache, damit der
+// Anwender eine klare Fehlermeldung bekommt statt eines kryptischen UPnP-Fehlers.
+app.delete('/api/fritz/device', async (req, res) => {
+  const sid = req.headers['x-fritz-sid'];
+  const session = sessions.get(sid);
+  if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
+  const { mac } = req.body || {};
+  if (!mac) return res.json({ success: false, error: 'mac fehlt' });
+
+  // Vorab: Online-Geräte ablehnen (FRITZ!Box würde sowieso fehlschlagen)
+  const cachedHosts = getCached('hosts', 60000);
+  if (Array.isArray(cachedHosts)) {
+    const host = cachedHosts.find(h => h.mac === mac);
+    if (host?.active) return res.json({ success: false, error: 'Aktive Geräte können nicht entfernt werden – Gerät muss offline sein.' });
+  }
+
+  // Versuch 1: TR-064. Wichtig: Parametername ist `NewMacAddress` (nicht `NewMACAddress`)
+  try {
+    await soapRequest(session.host, 'urn:dslforum-org:service:Hosts:1', 'X_AVM-DE_DeleteHost', session.username, session.password, session.controlUrls, { NewMacAddress: mac });
+    cache.delete('hosts');
+    cache.delete('netdev-map');
+    lastSeenMap.delete(mac);
+    return res.json({ success: true, _source: 'soap' });
+  } catch (soapErr) {
+    console.log('Delete host SOAP fehlgeschlagen, versuche data.lua:', soapErr.message);
+  }
+
+  // Versuch 2: data.lua-Fallback (FRITZ!Box-Web-UI nutzt selbe Route beim "×" auf netDev)
+  try {
+    const webSid = await getCachedWebSid(session);
+    if (!webSid) return res.json({ success: false, error: 'Kein webSid verfügbar' });
+    const params = new URLSearchParams({
+      xhr: '1', sid: webSid, lang: 'de', page: 'netDev',
+      dev: mac, btn_del: '', back_to_page: 'netDev',
+    });
+    const r = await fetch(`http://${session.host}/data.lua`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    const text = await r.text();
+    if (r.ok && !text.includes('"error"')) {
+      cache.delete('hosts');
+      cache.delete('netdev-map');
+      lastSeenMap.delete(mac);
+      return res.json({ success: true, _source: 'data.lua' });
+    }
+    return res.json({ success: false, error: 'data.lua hat das Löschen nicht bestätigt' });
+  } catch (err) {
+    console.error('Delete host error (data.lua):', err.message);
     return res.json({ success: false, error: err.message });
   }
 });
@@ -1734,42 +1830,76 @@ function normalizeMeshDevices(devices) {
 
 // ============ TELEFONIE ============
 
+// Heuristik: ist dieses Gerät ein DECT-Telefon (kein Smart-Home-Aktor)?
+// AVM-Telefone tragen typischerweise den productname „FRITZ!Fon …" bzw. einen
+// Namen mit „Mobilteil"/„Handset". Außerdem sind sie technisch HAN-FUN-Geräte
+// ohne Schalt-/Heiz-/Sensor-Bits (functionbitmask == 0/1).
+function looksLikePhone(d) {
+  const name        = String(d.name        || '').toLowerCase();
+  const productname = String(d.productname || '').toLowerCase();
+  const mask        = parseInt(d.functionbitmask || '0', 10) || 0;
+  if (productname.startsWith('fritz!fon') || productname.includes('handset')) return true;
+  if (/\b(mobilteil|handset|fon\b|c5|c6|mt-d|x6)/i.test(name)) return true;
+  // Smart-Home-spezifische Bits (Schalter/Heizung/Sensor/Lampe/Rollade) → kein Telefon
+  const SMARTHOME_MASK = (1<<2)|(1<<4)|(1<<5)|(1<<6)|(1<<7)|(1<<8)|(1<<9)|(1<<13)|(1<<15)|(1<<16)|(1<<17)|(1<<18)|(1<<19)|(1<<20);
+  if (mask & SMARTHOME_MASK) return false;
+  return false;
+}
+
+// Liefert die rohe SmartHome-Geräteliste (AHA-XML, mit data.lua-Fallback) und cached
+// das Ergebnis serverseitig. Wird sowohl von /api/fritz/smartHome als auch von
+// /api/fritz/dect (zur Filterung) verwendet.
+async function fetchSmartHomeDevices(session) {
+  const cached = getCached('smartHome', 60000); // 60s TTL – Smart-Home-Status ändert sich langsam
+  if (cached) return cached;
+  const webSid = await getCachedWebSid(session);
+  if (!webSid) return [];
+  // Primär: AHA-HTTP XML Interface (offizielle Schnittstelle für SmartHome-Geräte)
+  try {
+    const ahaUrl = `http://${session.host}/webservices/homeautoswitch.lua?switchcmd=getdevicelistinfos&sid=${webSid}`;
+    const r = await fetch(ahaUrl);
+    const xml = await r.text();
+    if (xml.includes('<devicelist')) {
+      const devices = parseAhaDeviceList(xml);
+      if (devices.length > 0) {
+        setCached('smartHome', devices);
+        return devices;
+      }
+    }
+  } catch {}
+  // Fallback: data.lua
+  try {
+    const params = new URLSearchParams({ xhr: '1', sid: webSid, lang: 'de', page: 'smartHome', xhrId: 'all' });
+    const r = await fetch(`http://${session.host}/data.lua`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    const text = await r.text();
+    if (text.trim().startsWith('{')) {
+      const data = JSON.parse(text);
+      const devices = data?.data?.devices || data?.data || [];
+      if (Array.isArray(devices) && devices.length > 0) {
+        const dedup = dedupSmartHomeDevices(devices);
+        setCached('smartHome', dedup);
+        return dedup;
+      }
+    }
+  } catch {}
+  setCached('smartHome', []); // negativ-cachen, sonst hämmert das Frontend bei jedem Reload
+  return [];
+}
+
 app.get('/api/fritz/smartHome', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   const session = sessions.get(sid);
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
   try {
-    const webSid = await getCachedWebSid(session);
-    // Primär: AHA-HTTP XML Interface (offizielle Schnittstelle für SmartHome/DECT-Geräte)
-    if (webSid) {
-      try {
-        const ahaUrl = `http://${session.host}/webservices/homeautoswitch.lua?switchcmd=getdevicelistinfos&sid=${webSid}`;
-        const r = await fetch(ahaUrl);
-        const xml = await r.text();
-        if (xml.includes('<devicelist')) {
-          const devices = parseAhaDeviceList(xml);
-          if (devices.length > 0) return res.json(devices);
-        }
-      } catch {}
-    }
-    // Fallback: data.lua
-    if (webSid) {
-      try {
-        const params = new URLSearchParams({ xhr: '1', sid: webSid, lang: 'de', page: 'smartHome', xhrId: 'all' });
-        const r = await fetch(`http://${session.host}/data.lua`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString(),
-        });
-        const text = await r.text();
-        if (text.trim().startsWith('{')) {
-          const data = JSON.parse(text);
-          const devices = data?.data?.devices || data?.data || [];
-          if (Array.isArray(devices) && devices.length > 0) return res.json(dedupSmartHomeDevices(devices));
-        }
-      } catch {}
-    }
-    return res.json([]);
+    const all = await fetchSmartHomeDevices(session);
+    // Defensiv: Telefone aus der SmartHome-Anzeige rauswerfen, falls die Box sie
+    // (auf manchen Firmwares über data.lua) doch in die SmartHome-Liste packt.
+    const filtered = all.filter(d => !looksLikePhone(d));
+    return res.json(filtered);
   } catch (err) {
     console.error('SmartHome error:', err.message);
     return res.json([]);
@@ -1780,6 +1910,10 @@ app.get('/api/fritz/dect', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   const session = sessions.get(sid);
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
+  // 60s Cache – DECT-Status (registriert/aktiv/Akku) ändert sich selten und der
+  // SOAP-Sweep über alle Handsets ist auf älteren Boxen langsam.
+  const cached = getCached('dect', 60000);
+  if (cached) return res.json(cached);
   try {
     // SOAP-Aufrufe einzeln kapseln – ein Fehler darf den data.lua-Fallback nicht blockieren
     let baseInfo = {};
@@ -1872,7 +2006,28 @@ app.get('/api/fritz/dect', async (req, res) => {
       }
     }
     if (handsets.length > 0 && baseInfo.NewDECTActive !== '1') baseInfo.NewDECTActive = '1';
-    return res.json({ ...baseInfo, handsets });
+
+    // Smart-Home-Geräte aus der DECT-Liste herausfiltern. AVM listet im SOAP
+    // `GetGenericDectEntry` ALLE DECT-registrierten Geräte – also auch
+    // Heizkörperregler (DECT 301), Schaltsteckdosen (DECT 200), Comet-Thermostate
+    // usw. Auf der Telefonie-Seite wollen wir aber nur echte Telefone sehen.
+    // Quervergleich mit der AHA-SmartHome-Liste (autoritative Quelle für SH);
+    // alles, was dort als SH-Gerät auftaucht, fliegt aus den Handsets raus.
+    try {
+      const shDevices = await fetchSmartHomeDevices(session);
+      if (shDevices.length > 0) {
+        const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
+        const shNames = new Set(shDevices.map(d => norm(d.name)));
+        const phoneOnly = handsets.filter(h => !shNames.has(norm(h.name)));
+        const result = { ...baseInfo, handsets: phoneOnly };
+        setCached('dect', result);
+        return res.json(result);
+      }
+    } catch {}
+
+    const result = { ...baseInfo, handsets };
+    setCached('dect', result);
+    return res.json(result);
   } catch (err) {
     console.error('DECT error:', err.message);
     return res.json({ handsets: [] });
@@ -1883,6 +2038,10 @@ app.get('/api/fritz/calls', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   const session = sessions.get(sid);
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
+  // 60s Cache – Anrufliste muss nicht sekundengenau sein und der XML-Download
+  // war auf einigen Fritz!Boxen >5s.
+  const cached = getCached('calls', 60000);
+  if (cached) return res.json(cached);
   try {
     let result = await soapRequest(session.host, 'urn:dslforum-org:service:X_AVM-DE_OnTel:1', 'GetCallList', session.username, session.password, session.controlUrls);
     if (!result?.NewCallListURL && !result?.['NewX_AVM-DE_CallListURL']) {
@@ -1912,6 +2071,7 @@ app.get('/api/fritz/calls', async (req, res) => {
         const number = isIncoming ? caller : called;
         calls.push({ date, name, number, from: caller, to: called, device, type, duration });
       }
+      setCached('calls', calls);
       return res.json(calls);
     }
     return res.json([]);
@@ -2096,6 +2256,9 @@ const SETTINGS_FILE = '/data/fritz-portal.json';
 let haSensorsEnabled     = process.env.HA_SENSORS === 'true';
 let haFastIntervalSec    = Math.max(10,  parseInt(process.env.HA_SENSORS_INTERVAL          || '60',  10));
 let haTrafficIntervalSec = Math.max(30,  parseInt(process.env.HA_SENSORS_TRAFFIC_INTERVAL  || '300', 10));
+// Default: aus. Wer dauerhafte HA-Sensor-Updates braucht, muss die Option in der
+// System-Page (oder per Add-on-Config) explizit aktivieren.
+let keepSessionAlive     = process.env.KEEP_SESSION_ALIVE === 'true';
 
 try {
   if (existsSync(SETTINGS_FILE)) {
@@ -2103,6 +2266,7 @@ try {
     if (s.ha_sensors !== undefined)         haSensorsEnabled     = !!s.ha_sensors;
     if (s.ha_sensors_interval)              haFastIntervalSec    = Math.max(10,  parseInt(s.ha_sensors_interval,        10));
     if (s.ha_sensors_traffic_interval)      haTrafficIntervalSec = Math.max(30,  parseInt(s.ha_sensors_traffic_interval, 10));
+    if (s.keep_session_alive !== undefined) keepSessionAlive     = !!s.keep_session_alive;
   }
 } catch {}
 
@@ -2328,6 +2492,37 @@ function startHaTimers() {
 
 startHaTimers();
 
+// ── Keep-Session-Alive ─────────────────────────────────────────────────────
+// Erstellt beim Add-on-Start automatisch die AUTO_SID-Session, sobald die
+// FRITZ!Box-Zugangsdaten in der HA-Add-on-Konfiguration hinterlegt sind. Damit
+// fängt der Background-Collector (15s-Tick) sofort an, eco/network/host-Caches
+// zu füllen – HA-Sensoren werden also auch dann aktualisiert, wenn niemand
+// die Web-UI im Browser geöffnet hat.
+async function ensureKeepAliveSession() {
+  if (!keepSessionAlive) return;
+  if (sessions.has(AUTO_SID)) return;
+  const host     = process.env.FRITZBOX_HOST;
+  const username = process.env.FRITZBOX_USER;
+  const password = process.env.FRITZBOX_PASSWORD;
+  if (!host || !username || !password) {
+    console.log('Keep-Session-Alive: keine FritzBox-Zugangsdaten – Session-Aufbau übersprungen.');
+    return;
+  }
+  try {
+    const controlUrls = await discoverControlUrls(host);
+    sessions.set(AUTO_SID, { host, username, password, controlUrls, isAutoSession: true, lastUsed: Date.now() });
+    const autoSession = sessions.get(AUTO_SID);
+    getCachedWebSid(autoSession).catch(() => {});
+    console.log('Keep-Session-Alive: Auto-Session beim Start aufgebaut.');
+  } catch (err) {
+    console.error('Keep-Session-Alive: Aufbau fehlgeschlagen:', err.message);
+  }
+}
+
+ensureKeepAliveSession().catch(() => {});
+// Zusätzlich periodisch nachprüfen, falls die Box beim ersten Versuch nicht erreichbar war
+setInterval(() => { ensureKeepAliveSession().catch(() => {}); }, 60000);
+
 app.get('/api/fritz/ha-settings', (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   if (!sessions.get(sid)) return res.status(401).json({ error: 'Nicht eingeloggt' });
@@ -2338,23 +2533,33 @@ app.get('/api/fritz/ha-settings', (req, res) => {
     ha_available:                !!HA_TOKEN,
     mqtt_available:              mqttAvailable,
     debug_logging:               debugLogging,
+    keep_session_alive:          keepSessionAlive,
   });
 });
 
 app.post('/api/fritz/ha-settings', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   if (!sessions.get(sid)) return res.status(401).json({ error: 'Nicht eingeloggt' });
-  const { ha_sensors, ha_sensors_interval, ha_sensors_traffic_interval, debug_logging } = req.body;
+  const { ha_sensors, ha_sensors_interval, ha_sensors_traffic_interval, debug_logging, keep_session_alive } = req.body;
   if (ha_sensors !== undefined)                  haSensorsEnabled     = !!ha_sensors;
   if (ha_sensors_interval !== undefined)         haFastIntervalSec    = Math.max(10,  parseInt(ha_sensors_interval,         10) || 60);
   if (ha_sensors_traffic_interval !== undefined) haTrafficIntervalSec = Math.max(30,  parseInt(ha_sensors_traffic_interval, 10) || 300);
   if (debug_logging !== undefined)               { debugLogging = !!debug_logging; console.log(`Debug-Logging ${debugLogging ? 'aktiviert' : 'deaktiviert'}`); }
+  if (keep_session_alive !== undefined) {
+    const wasOn = keepSessionAlive;
+    keepSessionAlive = !!keep_session_alive;
+    console.log(`Keep-Session-Alive ${keepSessionAlive ? 'aktiviert' : 'deaktiviert'}`);
+    // Beim Aktivieren sofort eine Auto-Session erstellen, falls noch keine läuft –
+    // sonst bliebe der Background-Collector bis zum nächsten Browser-Aufruf untätig.
+    if (keepSessionAlive && !wasOn) ensureKeepAliveSession().catch(() => {});
+  }
   try {
     writeFileSync(SETTINGS_FILE, JSON.stringify({
       ha_sensors:                  haSensorsEnabled,
       ha_sensors_interval:         haFastIntervalSec,
       ha_sensors_traffic_interval: haTrafficIntervalSec,
       debug_logging:               debugLogging,
+      keep_session_alive:          keepSessionAlive,
     }));
   } catch (e) { console.error('Settings speichern fehlgeschlagen:', e.message); }
   // Sync to HA Add-on config (requires hassio_api: true)
@@ -2368,12 +2573,12 @@ app.post('/api/fritz/ha-settings', async (req, res) => {
       await fetch('http://supervisor/addons/self/options', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ options: { ...opts, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, debug_logging: debugLogging } }),
+        body: JSON.stringify({ options: { ...opts, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, debug_logging: debugLogging, keep_session_alive: keepSessionAlive } }),
       });
     }
   } catch {}
   startHaTimers();
-  return res.json({ success: true, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec });
+  return res.json({ success: true, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, keep_session_alive: keepSessionAlive });
 });
 
 const PORT = 3003;

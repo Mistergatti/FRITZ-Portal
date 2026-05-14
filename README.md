@@ -2,12 +2,12 @@
   <img src="fritz-portal/icon.png" alt="FRITZ!Portal Logo" width="140"/>
 </p>
 <p align="center">
-  <strong>Das moderne Fritz!Box Dashboard als Home Assistant Add-on</strong><br/>
-  Echtzeit-Übersicht, Netzwerktopologie, HA-Sensoren und mehr – alles in einer eleganten Oberfläche. Ändere bequem Gerätenamen, vergebe neue IP Adressen oder blockiere unerwünschte Hosts direkt aus dem Add-on heraus. Vollständig integriert in die Home Assistant Benutzeroberfläche dank Ingress.
+  <strong>Das moderne Fritz!Box Dashboard als Home Assistant App</strong><br/>
+  Echtzeit-Übersicht, Netzwerktopologie, HA-Sensoren und mehr – alles in einer eleganten Oberfläche. Ändere bequem Gerätenamen, vergebe neue IP Adressen oder blockiere unerwünschte Hosts direkt aus der App heraus. Vollständig integriert in die Home Assistant Benutzeroberfläche dank Ingress.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant&logoColor=white" alt="HA Add-on"/>
+  <img src="https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=home-assistant&logoColor=white" alt="HA App"/>
   <img src="https://img.shields.io/badge/Version-1.4.1-blue" alt="Version"/>
   <img src="https://img.shields.io/badge/Architektur-amd64%20%7C%20aarch64%20%7C%20armv7-green" alt="Arch"/>
   <img src="https://img.shields.io/badge/Lizenz-MIT-lightgrey" alt="Lizenz"/>
@@ -42,7 +42,7 @@
 
 ### 1. Repository hinzufügen
 
-1. In HA: **Einstellungen → Add-ons → Add-on Store**
+1. In HA: **Einstellungen → Apps → App Store**
 2. Rechts oben auf **⋮ → Benutzerdefinierte Repositories** klicken
 3. URL eintragen:
    ```
@@ -50,7 +50,7 @@
    ```
 4. **Hinzufügen** klicken → Seite neu laden
 
-### 2. Add-on installieren
+### 2. App installieren
 
 1. **FRITZ!Portal** im Store suchen und öffnen
 2. **Installieren** klicken (Build dauert einige Minuten)
@@ -68,11 +68,19 @@
 4. **Speichern → Starten**
 5. Via **Benutzeroberfläche** öffnen oder direkt unter `http://<ha-ip>:3003`
 
-> **Hinweis:** Das Add-on meldet sich beim Start automatisch mit den konfigurierten Zugangsdaten an der Fritz!Box an – kein manuelles Login nötig.
+> **Hinweis:** Die App meldet sich beim Start automatisch mit den konfigurierten Zugangsdaten an der Fritz!Box an – kein manuelles Login nötig.
+
+> **Fritz!Box Berechtigungen:** Der verwendete Fritz!Box-Benutzer benötigt folgende Berechtigungen für die korrekte Funktionsweise der App:
+> - **Telefonie** (für Anrufliste und DECT-Handsets)
+> - **Geräte und WLAN** (für Hostliste, IP-Verwaltung und Blockier-Funktionen)
+> - **System** (für Firmware, CPU, RAM, Temperatur und Neustart-Funktion)
+> - **Smart Home** (optional, nur für SmartHome-Geräte)
+> 
+> Diese Berechtigungen werden meist automatisch für neue Benutzer in der Fritz!Box erstellt. Falls die App keinen Zugriff auf bestimmte Funktionen hat, stelle bitte die Berechtigungen unter **Fritz!Box → System → Benutzer** entsprechend ein.
 
 > **MQTT Discovery:** FRITZ!Portal sendet Sensordaten **immer automatisch via MQTT** an Home Assistant. Alle Sensoren werden dabei als ein gemeinsames **„FRITZ!Portal"**-Gerät in der HA-Geräteübersicht registriert und lassen sich dort individuell benennen, kategorisieren und auf Dashboards verwenden.
 >
-> **Kein MQTT-Broker vorhanden?** Den **REST-API Fallback** in der Add-on-Konfiguration (`ha_sensors: true`) oder direkt in der FRITZ!Portal-GUI aktivieren. Die Sensoren erscheinen dann als einzelne Entitäten unter *Einstellungen → Entitäten*. Um doppelte Entitäten zu vermeiden, sollte immer nur eine Methode aktiv sein.
+> **Kein MQTT-Broker vorhanden?** Den **REST-API Fallback** in der App-Konfiguration (`ha_sensors: true`) oder direkt in der FRITZ!Portal-GUI aktivieren. Die Sensoren erscheinen dann als einzelne Entitäten unter *Einstellungen → Entitäten*. Um doppelte Entitäten zu vermeiden, sollte immer nur eine Methode aktiv sein.
 
 ---
 
@@ -86,14 +94,14 @@ git clone https://github.com/jayjojayson/FRITZ-Portal.git
 cd FRITZ-Portal/fritz-portal
 
 # Docker Image bauen
-docker build -t fritz-portal-addon .
+docker build -t fritz-portal-app .
 
 # Container starten (Auto-Login via Umgebungsvariablen)
 docker run --rm -p 3003:3003 \
   -e FRITZBOX_HOST=fritz.box \
   -e FRITZBOX_USER=admin \
   -e FRITZBOX_PASSWORD=geheim \
-  fritz-portal-addon
+  fritz-portal-app
 ```
 
 Danach im Browser öffnen: **http://localhost:3003**

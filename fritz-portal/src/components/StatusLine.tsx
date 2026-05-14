@@ -5,7 +5,6 @@ interface StatusLineProps {
   authenticated: boolean;
   uptime?: number | null;        // seconds
   firmware?: string | null;
-  load?: string | null;          // "0.23 / 0.41 / 0.18"
   wanIp?: string | null;
   recording?: boolean;
 }
@@ -31,7 +30,6 @@ export default function StatusLine({
   authenticated,
   uptime,
   firmware,
-  load,
   wanIp,
   recording = true,
 }: StatusLineProps) {
@@ -51,7 +49,6 @@ export default function StatusLine({
       </span>
       <span>{t('LAUFZEIT')} <span className="val">{formatUptime(uptime)}</span></span>
       <span>{t('FW')} <span className="val">{firmware || '—'}</span></span>
-      <span className="slot-load">{t('LAST')} <span className="val">{load || '— / — / —'}</span></span>
       <span className="slot-wan">{t('WAN')} <span className="accent">{wanIp || '—'}</span></span>
       <span className="clock slot-clock">
         {formatClock(now, lang)}

@@ -33,7 +33,8 @@ const EN: Record<string, string> = {
   'Abgelaufen': 'EXPIRED',
   'LAUFZEIT': 'UPTIME',
   'FW': 'FW',
-  'LAST': 'LOAD',
+  'CPU AVG': 'CPU AVG',
+  'Durchschnittliche CPU-Auslastung der FRITZ!Box (1 / 5 / 15 Minuten)': 'Average FRITZ!Box CPU utilisation (1 / 5 / 15 minutes)',
   'REC': 'REC',
   'loading': 'loading',
 

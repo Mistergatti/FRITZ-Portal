@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import { getApiCache, setApiCache } from '../App';
 import { useT } from '../lib/i18n';
 
 interface SmartHomeProps {
@@ -8,14 +9,15 @@ interface SmartHomeProps {
 
 export default function SmartHome({ sid }: SmartHomeProps) {
   const t = useT();
-  const [loading, setLoading] = useState(true);
-  const [devices, setDevices] = useState<any[]>([]);
+  const cached: any[] | null = getApiCache('smartHome');
+  const [devices, setDevices] = useState<any[]>(cached || []);
+  const [loading, setLoading] = useState(!cached);
   const headers = { 'X-Fritz-SID': sid };
 
   useEffect(() => {
     apiFetch('/api/fritz/smartHome', { headers })
       .then(r => r.json())
-      .then(setDevices)
+      .then(d => { setApiCache('smartHome', d); setDevices(d); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);

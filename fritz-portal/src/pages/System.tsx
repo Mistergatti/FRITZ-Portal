@@ -13,7 +13,7 @@ export default function System({ sid }: SystemProps) {
   const [rebooting, setRebooting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [version] = useState('1.4.0');
+  const [version] = useState('1.4.2');
   const [fritzHost, setFritzHost] = useState('fritz.box');
 
   // HA-Sensor-Einstellungen
@@ -24,6 +24,7 @@ export default function System({ sid }: SystemProps) {
     ha_available: boolean;
     mqtt_available: boolean;
     debug_logging: boolean;
+    keep_session_alive: boolean;
   } | null>(null);
   const [haSaving, setHaSaving] = useState(false);
   const [haMessage, setHaMessage] = useState('');
@@ -65,6 +66,7 @@ export default function System({ sid }: SystemProps) {
           ha_sensors_interval:         haSettings.ha_sensors_interval,
           ha_sensors_traffic_interval: haSettings.ha_sensors_traffic_interval,
           debug_logging:               haSettings.debug_logging,
+          keep_session_alive:          haSettings.keep_session_alive,
         }),
       });
       const data = await res.json();
@@ -281,6 +283,30 @@ export default function System({ sid }: SystemProps) {
                 />
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t('Sek.')}</span>
               </div>
+            </div>
+
+            {/* Sitzung dauerhaft halten */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderTop: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 14 }}>{t('Sitzung dauerhaft aktiv halten')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>{t('Verbindung zur FRITZ!Box beim Add-on-Start automatisch aufbauen und permanent offen halten – nur dann werden HA-Sensoren auch dann aktualisiert, wenn das Portal nicht im Browser geöffnet ist.')}</div>
+              </div>
+              <button
+                onClick={() => setHaSettings(s => s ? { ...s, keep_session_alive: !s.keep_session_alive } : s)}
+                style={{
+                  width: 46, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+                  background: haSettings.keep_session_alive ? '#22c55e' : '#6b7280',
+                  position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                }}
+                title={haSettings.keep_session_alive ? t('Deaktivieren') : t('Aktivieren')}
+              >
+                <span style={{
+                  position: 'absolute', top: 3,
+                  left: haSettings.keep_session_alive ? 23 : 3,
+                  width: 20, height: 20, borderRadius: '50%', background: 'white',
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                }} />
+              </button>
             </div>
 
             {/* Debug-Logging */}

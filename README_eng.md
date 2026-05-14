@@ -3,12 +3,12 @@
 </p>
 
 <p align="center">
-  <strong>The modern Fritz!Box dashboard as a Home Assistant Add-on</strong><br/>
-  Real-time overview, network topology, HA sensors and more – all in one elegant interface. Easily rename devices, assign new IP addresses or block unwanted hosts directly from the add-on. Fully integrated into the Home Assistant UI via Ingress.
+  <strong>The modern Fritz!Box dashboard as a Home Assistant App</strong><br/>
+  Real-time overview, network topology, HA sensors and more – all in one elegant interface. Easily rename devices, assign new IP addresses or block unwanted hosts directly from the app. Fully integrated into the Home Assistant UI via Ingress.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant&logoColor=white" alt="HA Add-on"/>
+  <img src="https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=home-assistant&logoColor=white" alt="HA App"/>
   <img src="https://img.shields.io/badge/Version-1.4.1-blue" alt="Version"/>
   <img src="https://img.shields.io/badge/Architecture-amd64%20%7C%20aarch64%20%7C%20armhf-green" alt="Arch"/>
   <img src="https://img.shields.io/badge/License-MIT-lightgrey" alt="License"/>
@@ -43,7 +43,7 @@
 
 ### 1. Add the repository
 
-1. In HA: **Settings → Add-ons → Add-on Store**
+1. In HA: **Settings → Apps → App Store**
 2. Click **⋮ → Custom repositories** in the top right
 3. Enter the URL:
    ```
@@ -51,7 +51,7 @@
    ```
 4. Click **Add** → reload the page
 
-### 2. Install the add-on
+### 2. Install the app
 
 1. Search for **FRITZ!Portal** in the store and open it
 2. Click **Install** (the build may take a few minutes)
@@ -69,11 +69,19 @@
 4. **Save → Start**
 5. Open via **Web UI** or directly at `http://<ha-ip>:3003`
 
-> **Note:** The add-on automatically logs in to the Fritz!Box with the configured credentials on startup – no manual login required.
+> **Note:** The app automatically logs in to the Fritz!Box with the configured credentials on startup – no manual login required.
+
+> **Fritz!Box Permissions:** The Fritz!Box user you configure needs the following permissions for the app to work correctly:
+> - **Telephony** (for call log and DECT handsets)
+> - **Devices and WLAN** (for host list, IP management and blocking functions)
+> - **System** (for firmware, CPU, RAM, temperature and reboot function)
+> - **Smart Home** (optional, only for smart home devices)
+> 
+> These permissions are usually created automatically for new users in the Fritz!Box. If the app does not have access to certain functions, please adjust the permissions under **Fritz!Box → System → Users** accordingly.
 
 > **MQTT Discovery:** FRITZ!Portal **always sends sensor data via MQTT** to Home Assistant automatically. All sensors are registered as a single **„FRITZ!Portal"** device in the HA device overview, where they can be individually renamed, categorised and used on dashboards.
 >
-> **No MQTT broker available?** Enable the **REST API fallback** in the add-on configuration (`ha_sensors: true`) or directly in the FRITZ!Portal GUI. Sensors will then appear as individual entities under *Settings → Entities*. To avoid duplicate entities, only one method should be active at a time.
+> **No MQTT broker available?** Enable the **REST API fallback** in the app configuration (`ha_sensors: true`) or directly in the FRITZ!Portal GUI. Sensors will then appear as individual entities under *Settings → Entities*. To avoid duplicate entities, only one method should be active at a time.
 
 ---
 
@@ -87,14 +95,14 @@ git clone https://github.com/jayjojayson/FRITZ-Portal.git
 cd FRITZ-Portal/fritz-portal
 
 # Build the Docker image
-docker build -t fritz-portal-addon .
+docker build -t fritz-portal-app .
 
 # Start the container (auto-login via environment variables)
 docker run --rm -p 3003:3003 \
   -e FRITZBOX_HOST=fritz.box \
   -e FRITZBOX_USER=admin \
   -e FRITZBOX_PASSWORD=secret \
-  fritz-portal-addon
+  fritz-portal-app
 ```
 
 Then open in your browser: **http://localhost:3003**

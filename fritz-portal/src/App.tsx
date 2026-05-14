@@ -102,8 +102,20 @@ export default function App() {
           ...s,
           uptime: typeof info?.NewUpTime === 'number' ? info.NewUpTime : (parseInt(info?.NewUpTime, 10) || null),
           firmware: info?.NewSoftwareVersion || info?.NewFirmwareVersion || null,
+          // Manche Firmwares liefern NewExternalIPAddress hier mit, die meisten nicht –
+          // die WAN-IP holen wir parallel über loadWan().
           wanIp: info?.NewExternalIPAddress || s.wanIp,
         }));
+      } catch {}
+    };
+
+    const loadWan = async () => {
+      try {
+        const r = await apiFetch('/api/fritz/network/wan', { headers });
+        const wan = await r.json();
+        if (wan?.NewExternalIPAddress) {
+          setStatus(s => ({ ...s, wanIp: wan.NewExternalIPAddress }));
+        }
       } catch {}
     };
 
@@ -117,9 +129,11 @@ export default function App() {
 
     loadInfo();
     loadEco();
+    loadWan();
     const tInfo = setInterval(loadInfo, 60000);
-    const tEco  = setInterval(loadEco, 15000);
-    return () => { clearInterval(tInfo); clearInterval(tEco); };
+    const tEco  = setInterval(loadEco, 30000);
+    const tWan  = setInterval(loadWan, 120000);
+    return () => { clearInterval(tInfo); clearInterval(tEco); clearInterval(tWan); };
   }, [sid]);
 
   const handleSelectDevice = (mac: string) => {
@@ -194,7 +208,6 @@ export default function App() {
         authenticated={!!sid}
         uptime={status.uptime}
         firmware={status.firmware}
-        load={status.load}
         wanIp={status.wanIp}
         recording={true}
       />
@@ -215,7 +228,9 @@ export default function App() {
         <span>↑↓ {t('navigieren')}</span>
         <span>enter {t('öffnen')}</span>
         <span>/ {t('suchen')}</span>
-        <span className="right">{t('theme')}: <span className="accent">SLATE</span></span>
+        <span className="right" title={t('Durchschnittliche CPU-Auslastung der FRITZ!Box (1 / 5 / 15 Minuten)')}>
+          {t('CPU AVG')} 1m·5m·15m: <span className="accent">{status.load || '— / — / —'}</span>
+        </span>
       </div>
     </div>
   );

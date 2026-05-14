@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/apiFetch';
+import { getApiCache, setApiCache } from '../App';
 import { useT } from '../lib/i18n';
 
 interface NetworkProps {
@@ -11,12 +12,13 @@ type NetworkTab = 'overview' | 'lan' | 'wan' | 'wlan' | 'dhcp';
 export default function Network({ sid }: NetworkProps) {
   const t = useT();
   const [tab, setTab] = useState<NetworkTab>('overview');
-  const [loading, setLoading] = useState(true);
-  const [lanInfo, setLanInfo] = useState<any>(null);
-  const [wanInfo, setWanInfo] = useState<any>(null);
-  const [wlanInfo, setWlanInfo] = useState<any[]>([]);
-  const [dhcpInfo, setDhcpInfo] = useState<any>(null);
-  const [meshData, setMeshData] = useState<any>(null);
+  const [lanInfo, setLanInfo] = useState<any>(getApiCache('network-lan'));
+  const [wanInfo, setWanInfo] = useState<any>(getApiCache('network-wan'));
+  const [wlanInfo, setWlanInfo] = useState<any[]>(getApiCache('network-wlan') || []);
+  const [dhcpInfo, setDhcpInfo] = useState<any>(getApiCache('network-dhcp'));
+  const [meshData, setMeshData] = useState<any>(getApiCache('network-mesh'));
+  const hasCache = !!(getApiCache('network-lan') || getApiCache('network-wan'));
+  const [loading, setLoading] = useState(!hasCache);
   const [meshLoading, setMeshLoading] = useState(false);
 
   const headers = { 'X-Fritz-SID': sid };
@@ -34,21 +36,40 @@ export default function Network({ sid }: NetworkProps) {
         apiFetch('/api/fritz/network/dhcp', { headers }),
       ]);
 
-      setLanInfo(await lanRes.json());
-      setWanInfo(await wanRes.json());
-      setWlanInfo(await wlanRes.json());
-      setDhcpInfo(await dhcpRes.json());
+      const lan = await lanRes.json();
+      const wan = await wanRes.json();
+      const wlan = await wlanRes.json();
+      const dhcp = await dhcpRes.json();
+
+      setApiCache('network-lan', lan);
+      setApiCache('network-wan', wan);
+      setApiCache('network-wlan', wlan);
+      setApiCache('network-dhcp', dhcp);
+
+      setLanInfo(lan);
+      setWanInfo(wan);
+      setWlanInfo(wlan);
+      setDhcpInfo(dhcp);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-    // Mesh parallel nachladen (max 15s Timeout)
-    setMeshLoading(true);
+    // Mesh parallel nachladen. Wenn schon ein gecachter Stand vorhanden ist,
+    // bleibt die Topologie sofort sichtbar – der Refresh läuft transparent im
+    // Hintergrund. Nur beim allerersten Aufruf (kein Cache) zeigen wir den
+    // Spinner; dort spart der 15s-Timeout-Watchdog endlose Wartezeit, falls die
+    // Box den Mesh-Aufbau dehnt (s. CHANGELOG 1.4.x).
+    const cachedMesh = getApiCache('network-mesh');
+    if (!cachedMesh) {
+      setMeshLoading(true);
+    }
     const meshTimeout = setTimeout(() => setMeshLoading(false), 15000);
     try {
       const meshRes = await apiFetch('/api/fritz/mesh', { headers });
-      setMeshData(await meshRes.json());
+      const mesh = await meshRes.json();
+      setApiCache('network-mesh', mesh);
+      setMeshData(mesh);
     } catch {}
     finally {
       clearTimeout(meshTimeout);
