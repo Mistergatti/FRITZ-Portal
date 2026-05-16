@@ -13,8 +13,15 @@
   <img src="https://img.shields.io/badge/Lizenz-MIT-lightgrey" alt="Lizenz"/>
 </p>
 <p align="center">
-Wenn euch die App gefällt, würde ich mich über eine Sternebewertung ⭐ freuen. 🤗
+Wenn euch die App gefällt, würde ich mich über eine Sternebewertung ⭐ freuen. 🤗  
 </p>
+
+<div align="center">
+  
+[![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-Buy%20Me%20a%20Coffee-darkgreen?style=flat&logo=ko-fi&logoColor=white)](https://ko-fi.com/jayjojayson)
+[![Support](https://img.shields.io/badge/%20-Support%20Me-darkgreen?style=flat&logo=paypal&logoColor=white)](https://www.paypal.me/quadFlyerFW)
+</div>
+
 <p align="center">
   <img src="fritz-portal/docs/images/screenshot-fritzportal-lite.png" alt="FRITZ!Portal Screenshot" width="800"/>  
   <img src="fritz-portal/docs/images/screenshot-fritzportal-dark.png" alt="FRITZ!Portal traffic" width="800"/> 
