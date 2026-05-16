@@ -13,7 +13,9 @@
   <img src="https://img.shields.io/badge/Architecture-amd64%20%7C%20aarch64%20%7C%20armhf-green" alt="Arch"/>
   <img src="https://img.shields.io/badge/License-MIT-lightgrey" alt="License"/>
 </p>
-
+<p align="center">
+If you like the App, I would appreciate a Star rating ⭐ from you. 🤗 
+</p>
 <p align="center">
   <img src="fritz-portal/docs/images/screenshot-fritzportal-lite.png" alt="FRITZ!Portal Screenshot" width="800"/>  
   <img src="fritz-portal/docs/images/screenshot-fritzportal-dark.png" alt="FRITZ!Portal traffic" width="800"/> 
