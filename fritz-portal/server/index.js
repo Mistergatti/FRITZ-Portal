@@ -1422,6 +1422,28 @@ app.get('/api/fritz/network/wlan', async (req, res) => {
   }
 });
 
+// WLAN (z. B. Gastzugang) ein-/ausschalten. TR-064-`SetEnable` braucht in der
+// Fritz!Box-Benutzerverwaltung „FRITZ!Box-Einstellungen" inkl. Schreibrecht.
+app.post('/api/fritz/network/wlan/enable', async (req, res) => {
+  const sid = req.headers['x-fritz-sid'];
+  const session = sessions.get(sid);
+  if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
+  const { index, enable } = req.body || {};
+  if (!index || enable === undefined) return res.status(400).json({ error: 'index und enable erforderlich' });
+  const svc = `urn:dslforum-org:service:WLANConfiguration:${index}`;
+  try {
+    await soapRequest(session.host, svc, 'SetEnable', session.username, session.password, session.controlUrls, {
+      NewEnable: enable ? '1' : '0',
+    });
+    // Cache invalidieren, damit das nächste GET den neuen Status liefert
+    cache.delete('network-wlan');
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(`WLAN ${index} SetEnable error:`, err.message);
+    return res.json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/fritz/network/wlan', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   const session = sessions.get(sid);
@@ -1614,6 +1636,42 @@ app.get('/api/fritz/mesh', async (req, res) => {
     }
   }
 
+  // Gemeinsamer Mesh-Extractor – wird sowohl von /data.lua-Antworten als auch von
+  // den älteren `.lua`-Endpunkten (meshlist, mesh_overview) verwendet. Die FRITZ!OS-7.50+
+  // mesh_overview-Variante (6690/6860) packt die Topologie z. B. unter `data.topology`,
+  // ältere meshlist.lua-Antworten unter `meshlist.nodes` – wir prüfen alle bekannten Pfade.
+  function extractMeshFromJson(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const containers = [raw, raw.data, raw.meshlist, raw.data?.meshlist, raw.data?.mesh];
+    for (const c of containers) {
+      if (!c || typeof c !== 'object') continue;
+      const nodeList = c.nodes || c.meshNodes || c.mesh_nodes ||
+                       c.topology?.nodes || c.topo?.nodes ||
+                       c.vars?.topology?.nodes || null;
+      const linkList = c.links || c.meshLinks || c.mesh_links ||
+                       c.topology?.links || c.topo?.links ||
+                       c.vars?.topology?.links || null;
+      if (nodeList && Array.isArray(nodeList) && nodeList.length > 0) {
+        return normalizeMeshData(nodeList, linkList || []);
+      }
+    }
+    const d = raw?.data || raw || {};
+    // netDev-Format: { data: { active: [...], passive: [...] } } – Quelle der Fritz-UI-Mesh-Ansicht
+    const activeDevices = Array.isArray(d.active) ? d.active : null;
+    if (activeDevices && activeDevices.length > 0) {
+      return normalizeMeshDevices(activeDevices);
+    }
+    const devices = d.devices || d.data || [];
+    if (Array.isArray(devices) && devices.length > 0) {
+      const meshDevices = devices.filter(dev =>
+        dev.mesh_role || dev.is_mesh_master !== undefined || dev.meshRole ||
+        dev.node_interfaces || dev.type === 'mesh_master' || dev.type === 'mesh_satellite'
+      );
+      if (meshDevices.length > 0) return normalizeMeshDevices(meshDevices);
+    }
+    return null;
+  }
+
   async function tryDataLuaPage(page, xhrId = 'all', timeoutMs = 15000) {
     try {
       const params = new URLSearchParams({ xhr: '1', sid: webSid, lang: 'de', page, xhrId });
@@ -1626,34 +1684,13 @@ app.get('/api/fritz/mesh', async (req, res) => {
       console.log(`Mesh: page=${page}${xhrId !== 'all' ? ' xhrId=' + xhrId : ''} status=${r.status} length=${text.length}`);
       if (!text.trim().startsWith('{')) return null;
       const raw = JSON.parse(text);
-      const d = raw?.data || raw || {};
-
-      const nodeList = d.nodes || d.meshNodes || d.mesh_nodes ||
-                       d.topology?.nodes || d.topo?.nodes ||
-                       d.vars?.topology?.nodes || null;
-      const linkList = d.links || d.meshLinks || d.mesh_links ||
-                       d.topology?.links || d.topo?.links ||
-                       d.vars?.topology?.links || null;
-      if (nodeList && Array.isArray(nodeList) && nodeList.length > 0) {
-        return normalizeMeshData(nodeList, linkList || []);
+      const result = extractMeshFromJson(raw);
+      if (!result) {
+        const topKeys = Object.keys(raw || {}).slice(0, 10).join(',');
+        const dataKeys = raw?.data && typeof raw.data === 'object' ? Object.keys(raw.data).slice(0, 10).join(',') : '';
+        console.log(`Mesh: page=${page} extract leer (top=[${topKeys}] data=[${dataKeys}])`);
       }
-
-      // netDev-Format: { data: { active: [...], passive: [...] } } – das ist die Quelle,
-      // die die Fritz-Weboberfläche selbst für die Mesh-Ansicht nutzt.
-      const activeDevices = Array.isArray(d.active) ? d.active : null;
-      if (activeDevices && activeDevices.length > 0) {
-        return normalizeMeshDevices(activeDevices);
-      }
-
-      const devices = d.devices || d.data || [];
-      if (Array.isArray(devices) && devices.length > 0) {
-        const meshDevices = devices.filter(dev =>
-          dev.mesh_role || dev.is_mesh_master !== undefined || dev.meshRole ||
-          dev.node_interfaces || dev.type === 'mesh_master' || dev.type === 'mesh_satellite'
-        );
-        if (meshDevices.length > 0) return normalizeMeshDevices(meshDevices);
-      }
-      return null;
+      return result;
     } catch (err) {
       console.log(`Mesh: page=${page} Fehler: ${err.message}`);
       return null;
@@ -1668,9 +1705,13 @@ app.get('/api/fritz/mesh', async (req, res) => {
       if (r.status === 404) return null;
       if (!text.trim().startsWith('{')) return null;
       const raw = JSON.parse(text);
-      const nodeList = raw?.meshlist?.nodes || raw?.nodes || [];
-      if (nodeList.length > 0) return normalizeMeshData(nodeList, raw?.meshlist?.links || raw?.links || []);
-      return null;
+      const result = extractMeshFromJson(raw);
+      if (!result) {
+        const topKeys = Object.keys(raw || {}).slice(0, 10).join(',');
+        const dataKeys = raw?.data && typeof raw.data === 'object' ? Object.keys(raw.data).slice(0, 10).join(',') : '';
+        console.log(`Mesh: ${label} extract leer (top=[${topKeys}] data=[${dataKeys}])`);
+      }
+      return result;
     } catch (err) {
       console.log(`Mesh: ${label} Fehler: ${err.message}`);
       return null;
@@ -1830,6 +1871,67 @@ function normalizeMeshDevices(devices) {
 
 // ============ TELEFONIE ============
 
+// Strenge Namens-Normalisierung für Cross-Reference zwischen den Listen
+// (SOAP-DECT, AHA-SmartHome, data.lua-DECT). Whitespace, Bindestriche,
+// Unterstriche werden komprimiert; deutsche Umlaute/Akzente werden auf ASCII
+// abgebildet. So matcht „Comet DECT-Bad" zwischen DECT- und AHA-Liste auch
+// dann noch, wenn der User den Namen in einer Quelle anders geschrieben hat.
+function normDectName(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // Akzente strippen
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, ''); // alles außer alnum killen → "Comet DECT-Bad" → "cometdectbad"
+}
+
+// Liefert die DECT-Klassifizierung aus data.lua?page=dect. Die FRITZ!Box-UI
+// trennt dort sauber zwischen `handsets`/`mobiles` (= echte Telefone) und
+// `devices` (= DECT-Smart-Home-Aktoren wie DECT 200, DECT 301, Comet DECT,
+// HAN-FUN-Schaltsteckdosen). Das nutzen wir, um SOAP-Entries trennscharf
+// zu klassifizieren – Cross-Reference mit AHA allein fängt Aktoren nicht ab,
+// die in der AHA-Liste anders heißen oder dort gar nicht auftauchen.
+async function fetchDectClassification(session) {
+  const cached = getCached('dect-classification', 60000);
+  if (cached) return cached;
+  const empty = { phoneNames: new Set(), actorNames: new Set() };
+  const webSid = await getCachedWebSid(session);
+  if (!webSid) return empty;
+  for (const page of ['dect', 'dectMobile', 'dectDevices']) {
+    try {
+      const params = new URLSearchParams({ xhr: '1', sid: webSid, lang: 'de', page, xhrId: 'all' });
+      const r = await fetch(`http://${session.host}/data.lua`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      });
+      const text = await r.text();
+      if (!text.trim().startsWith('{')) continue;
+      const d = JSON.parse(text)?.data || {};
+      const dectData = d.dect || d;
+      const handsetSources = [d.handsets, d.mobiles, dectData.handsets, dectData.mobiles].filter(Array.isArray);
+      const actorSources   = [d.devices, dectData.devices, d.smartHome, dectData.smartHome].filter(Array.isArray);
+      const result = { phoneNames: new Set(), actorNames: new Set() };
+      for (const list of handsetSources) {
+        for (const h of list) {
+          const n = normDectName(h.name || h.device_name || h.displayname || '');
+          if (n) result.phoneNames.add(n);
+        }
+      }
+      for (const list of actorSources) {
+        for (const a of list) {
+          const n = normDectName(a.name || a.device_name || a.displayname || '');
+          if (n) result.actorNames.add(n);
+        }
+      }
+      if (result.phoneNames.size + result.actorNames.size > 0) {
+        setCached('dect-classification', result);
+        return result;
+      }
+    } catch {}
+  }
+  return empty;
+}
+
 // Heuristik: ist dieses Gerät ein DECT-Telefon (kein Smart-Home-Aktor)?
 // AVM-Telefone tragen typischerweise den productname „FRITZ!Fon …" bzw. einen
 // Namen mit „Mobilteil"/„Handset". Außerdem sind sie technisch HAN-FUN-Geräte
@@ -1895,10 +1997,20 @@ app.get('/api/fritz/smartHome', async (req, res) => {
   const session = sessions.get(sid);
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
   try {
-    const all = await fetchSmartHomeDevices(session);
-    // Defensiv: Telefone aus der SmartHome-Anzeige rauswerfen, falls die Box sie
-    // (auf manchen Firmwares über data.lua) doch in die SmartHome-Liste packt.
-    const filtered = all.filter(d => !looksLikePhone(d));
+    const [all, classification] = await Promise.all([
+      fetchSmartHomeDevices(session),
+      fetchDectClassification(session).catch(() => ({ phoneNames: new Set(), actorNames: new Set() })),
+    ]);
+    const phoneNames = classification.phoneNames || new Set();
+    // Telefone aus SmartHome rauswerfen – zwei Quellen kombiniert:
+    //  - looksLikePhone() = Heuristik auf productname/Name
+    //  - data.lua-handsets-Whitelist = was die FRITZ!Box selbst als „Mobilteil" listet
+    const filtered = all.filter(d => {
+      if (looksLikePhone(d)) return false;
+      const n = normDectName(d.name);
+      if (n && phoneNames.has(n)) return false;
+      return true;
+    });
     return res.json(filtered);
   } catch (err) {
     console.error('SmartHome error:', err.message);
@@ -1971,11 +2083,13 @@ app.get('/api/fritz/dect', async (req, res) => {
               baseInfo.NewDECTPowerActive = dectData.ecomode === true || dectData.ecomode === '1' ? '1' : '0';
             }
             if (handsets.length === 0) {
-              // Breit suchen: verschiedene Pfade für Handset-Listen
+              // Wichtig: nur `handsets`/`mobiles` als Telefone werten – `devices` ist
+              // die Liste der DECT-Smart-Home-Aktoren in der FRITZ!Box-UI und gehört
+              // NICHT in die Telefonie-Anzeige (vorher wurden die hier irrtümlich
+              // mit reingemischt).
               const candidates = [
                 d?.data?.handsets, dectData.handsets,
-                dectData.devices,  dectData.mobiles,
-                d?.data?.mobiles,  d?.data?.devices,
+                d?.data?.mobiles,  dectData.mobiles,
               ];
               for (const list of candidates) {
                 if (Array.isArray(list) && list.length > 0) {
@@ -2011,18 +2125,44 @@ app.get('/api/fritz/dect', async (req, res) => {
     // `GetGenericDectEntry` ALLE DECT-registrierten Geräte – also auch
     // Heizkörperregler (DECT 301), Schaltsteckdosen (DECT 200), Comet-Thermostate
     // usw. Auf der Telefonie-Seite wollen wir aber nur echte Telefone sehen.
-    // Quervergleich mit der AHA-SmartHome-Liste (autoritative Quelle für SH);
-    // alles, was dort als SH-Gerät auftaucht, fliegt aus den Handsets raus.
+    //
+    // Zwei Quellen werden gegen die SOAP-Liste gehalten:
+    //   1. AHA-SmartHome (homeautoswitch.lua) – autoritativ für AVM/HAN-FUN-SH
+    //   2. data.lua?page=dect → `devices`-Array – sieht auch DECT-Aktoren, die
+    //      AHA aus Firmware-Gründen nicht ausliefert (z. B. RolloTron auf
+    //      älteren 7530er, manche Fremd-HAN-FUN-Geräte). Liefert zusätzlich
+    //      eine positive `handsets`-Liste, die wir bei Mehrdeutigkeit als
+    //      „ist definitiv ein Telefon"-Whitelist nutzen.
+    // Namen-Match läuft über `normDectName` (akzent-strip + alnum-only) damit
+    // Schreibweisen-Drift zwischen den Quellen kein Problem ist.
     try {
-      const shDevices = await fetchSmartHomeDevices(session);
-      if (shDevices.length > 0) {
-        const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
-        const shNames = new Set(shDevices.map(d => norm(d.name)));
-        const phoneOnly = handsets.filter(h => !shNames.has(norm(h.name)));
-        const result = { ...baseInfo, handsets: phoneOnly };
-        setCached('dect', result);
-        return res.json(result);
-      }
+      const [shDevices, classification] = await Promise.all([
+        fetchSmartHomeDevices(session).catch(() => []),
+        fetchDectClassification(session).catch(() => ({ phoneNames: new Set(), actorNames: new Set() })),
+      ]);
+      const actorNames = new Set([
+        ...shDevices.map(d => normDectName(d.name)),
+        ...Array.from(classification.actorNames || []),
+      ].filter(Boolean));
+      const phoneNames = classification.phoneNames || new Set();
+      const filtered = handsets.filter(h => {
+        const n = normDectName(h.name);
+        // Definitiv Telefon (data.lua-handsets-Whitelist): immer behalten
+        if (n && phoneNames.has(n)) return true;
+        // Definitiv Aktor (AHA oder data.lua-devices): rauswerfen
+        if (n && actorNames.has(n)) return false;
+        // Fallback: defensive Heuristik – sieht es wie ein Telefon aus?
+        // Telefone haben keine SH-Funktionsbits (functionbitmask kennen wir hier
+        // nicht), aber productname/Name-Patterns greifen für FRITZ!Fon/MT-D etc.
+        if (looksLikePhone({ name: h.name, productname: h.model })) return true;
+        // Letzte Reserve: wenn weder AHA noch data.lua eine Klassifizierung haben,
+        // behalten – sonst würden ohne Cache am ersten Aufruf alle Geräte verschwinden.
+        if (actorNames.size === 0 && phoneNames.size === 0) return true;
+        return false;
+      });
+      const result = { ...baseInfo, handsets: filtered };
+      setCached('dect', result);
+      return res.json(result);
     } catch {}
 
     const result = { ...baseInfo, handsets };
@@ -2058,11 +2198,14 @@ app.get('/api/fritz/calls', async (req, res) => {
         const x = match[1];
         const type = x.match(/<Type>([^<]*)<\/Type>/)?.[1] || '';
         const date = x.match(/<Date>([^<]*)<\/Date>/)?.[1] || '';
-        const name = x.match(/<Name>([^<]*)<\/Name>/)?.[1] || '';
+        // Issue #28: AVM kodiert Sonderzeichen in <Name>/<Device> als XML-Entities
+        // (`&amp;` für `&`, `&auml;`/`&#252;` für Umlaute …). Ohne Decode landen die
+        // 1:1 im Frontend – darum decodeXmlEntities auf alle Text-Felder.
+        const name = decodeXmlEntities(x.match(/<Name>([^<]*)<\/Name>/)?.[1] || '');
         const duration = x.match(/<Duration>([^<]*)<\/Duration>/)?.[1] || '';
-        const caller = x.match(/<Caller>([^<]*)<\/Caller>/)?.[1] || '';
-        const called = x.match(/<Called>([^<]*)<\/Called>/)?.[1] || '';
-        const device = x.match(/<Device>([^<]*)<\/Device>/)?.[1] || '';
+        const caller = decodeXmlEntities(x.match(/<Caller>([^<]*)<\/Caller>/)?.[1] || '');
+        const called = decodeXmlEntities(x.match(/<Called>([^<]*)<\/Called>/)?.[1] || '');
+        const device = decodeXmlEntities(x.match(/<Device>([^<]*)<\/Device>/)?.[1] || '');
         // Fritz-XML-Semantik: Caller = wer angerufen hat, Called = wer angerufen wurde.
         // Das passt 1:1 auf from/to – egal ob eingehend oder ausgehend.
         // Eingehend (1), Verpasst (2), Aktiv eingehend (9), Abgewiesen (10) → Gegenstelle = Caller.

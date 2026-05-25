@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue *)",
+      "Bash(curl -s https://api.github.com/repos/jayjojayson/FRITZ-Portal/issues/20)",
+      "Bash(curl -s https://api.github.com/repos/jayjojayson/FRITZ-Portal/issues/28)",
+      "Bash(curl -s https://api.github.com/repos/jayjojayson/FRITZ-Portal/issues/30)",
+      "Bash(curl -s https://api.github.com/repos/jayjojayson/FRITZ-Portal/issues/__TRACKED_VAR__)"
+    ]
+  }
+}

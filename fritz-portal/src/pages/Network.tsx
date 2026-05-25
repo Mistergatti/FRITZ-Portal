@@ -789,6 +789,39 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
   const [editPass, setEditPass] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState<Record<number, boolean>>({});
   const [messages, setMessages] = useState<Record<number, string>>({});
+  const [toggling, setToggling] = useState<Record<number, boolean>>({});
+  // Lokale Override-Map für den Enable-Status: Wir können den WLAN-Status erst nach
+  // einem Reload aus der Box bestätigen. Bis dahin zeigen wir den optimistisch neuen
+  // Stand, damit das Toggle nicht zurückspringt während die Box noch arbeitet.
+  const [enableOverride, setEnableOverride] = useState<Record<number, boolean>>({});
+
+  const handleToggleEnable = async (wlanIndex: number, current: boolean) => {
+    const next = !current;
+    setToggling(s => ({ ...s, [wlanIndex]: true }));
+    setMessages(m => ({ ...m, [wlanIndex]: '' }));
+    // Optimistisches UI-Update
+    setEnableOverride(o => ({ ...o, [wlanIndex]: next }));
+    try {
+      const res = await apiFetch('/api/fritz/network/wlan/enable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ index: wlanIndex, enable: next }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessages(m => ({ ...m, [wlanIndex]: next ? t('WLAN aktiviert') : t('WLAN deaktiviert') }));
+      } else {
+        // Override zurückrollen, da die Box die Änderung abgelehnt hat
+        setEnableOverride(o => { const n = { ...o }; delete n[wlanIndex]; return n; });
+        setMessages(m => ({ ...m, [wlanIndex]: t('Fehler: {e}').replace('{e}', data.error || t('Unbekannt')) }));
+      }
+    } catch {
+      setEnableOverride(o => { const n = { ...o }; delete n[wlanIndex]; return n; });
+      setMessages(m => ({ ...m, [wlanIndex]: t('Verbindungsfehler') }));
+    } finally {
+      setToggling(s => ({ ...s, [wlanIndex]: false }));
+    }
+  };
 
   const getSecurity = (standard: string) => {
     if (!standard) return t('Keine');
@@ -839,11 +872,13 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
   return (
     <div>
       {wlanInfo.map((w, i) => {
-        const isEnabled = w.NewStatus === 'Up';
+        const wlanIdx: number = w._index || (i + 1);
+        const isEnabledFromBox = w.NewStatus === 'Up' || w.NewEnable === '1' || w.NewEnable === 1;
+        // Optimistisches Override hat Vorrang, bis der nächste Box-Status eintrifft.
+        const isEnabled = enableOverride[wlanIdx] !== undefined ? enableOverride[wlanIdx] : isEnabledFromBox;
         const color = bandColors[i % bandColors.length];
         const bg = bandBg[i % bandBg.length];
         const freq = getFrequency(w.NewChannel || '');
-        const wlanIdx: number = w._index || (i + 1);
 
         return (
           <div className="card" key={i} style={{ borderLeft: `4px solid ${color}` }}>
@@ -863,15 +898,36 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
                     {bandLabels[i % bandLabels.length]} {freq !== '-' ? `\u2013 ${freq}` : ''}
                   </div>
                 </div>
-                <div style={{
-                  padding: '6px 14px',
-                  borderRadius: 20,
-                  background: isEnabled ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                  color: isEnabled ? '#22c55e' : '#ef4444',
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}>
-                  {isEnabled ? t('Aktiv') : t('Inaktiv')}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{
+                    padding: '6px 14px',
+                    borderRadius: 20,
+                    background: isEnabled ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                    color: isEnabled ? '#22c55e' : '#ef4444',
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}>
+                    {isEnabled ? t('Aktiv') : t('Inaktiv')}
+                  </span>
+                  <button
+                    onClick={() => handleToggleEnable(wlanIdx, isEnabled)}
+                    disabled={!!toggling[wlanIdx]}
+                    title={isEnabled ? t('Deaktivieren') : t('Aktivieren')}
+                    style={{
+                      width: 46, height: 26, borderRadius: 13, border: 'none',
+                      cursor: toggling[wlanIdx] ? 'default' : 'pointer',
+                      background: isEnabled ? '#22c55e' : '#6b7280',
+                      position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                      opacity: toggling[wlanIdx] ? 0.6 : 1,
+                    }}
+                  >
+                    <span style={{
+                      position: 'absolute', top: 3,
+                      left: isEnabled ? 23 : 3,
+                      width: 20, height: 20, borderRadius: '50%', background: 'white',
+                      transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                    }} />
+                  </button>
                 </div>
               </div>
 
@@ -887,7 +943,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{getSecurity(w.NewStandard || '')}</div>
                 </div>
                 <div style={{ background: bg, borderRadius: 10, padding: 16 }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Verschl\u00fcsselung</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{t('Verschl\u00fcsselung')}</div>
                   <div style={{ fontSize: 20, fontWeight: 700, color }}>{getSecurity(w.NewStandard || '')}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{isEnabled ? t('Gesichert') : '-'}</div>
                 </div>

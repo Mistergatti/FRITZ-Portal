@@ -9,7 +9,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=home-assistant&logoColor=white" alt="HA App"/>
-  <img src="https://img.shields.io/badge/Version-1.4.2-blue" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.4.3-blue" alt="Version"/>
   <img src="https://img.shields.io/badge/Architecture-amd64%20%7C%20aarch64%20%7C%20armhf-green" alt="Arch"/>
   <img src="https://img.shields.io/badge/License-MIT-lightgrey" alt="License"/>
 </p>
@@ -39,17 +39,20 @@ If you like the App, I would appreciate a Star rating ⭐ from you. 🤗
 
 | Area | What's included |
 |---|---|
-| **Dashboard** | Live display of CPU, RAM, temperature with history graph (3h) |
-| **Device List** | All connected hosts with status, IP, MAC, connection type and block function |
-| **Network** | LAN, WAN, WLAN, DHCP – details at a glance; mesh topology visualisation |
-| **Traffic** | Live download/upload chart + statistics for Today, Yesterday, Week, Month, Last Month |
-| **Telephony** | Call list and DECT handsets |
-| **System** | Fritz!Box model, firmware, uptime, reboot function |
-| **HA Sensors** | CPU, RAM, temp, devices, IPs, download, upload, traffic – automatically pushed as sensors to Home Assistant |
+| **Dashboard** | 6 live tiles (model, CPU, RAM, temp, hosts, IP pool) with sparklines; `TRAFFIC.LIVE` chart and sortable `HOSTS.ACTIVE` list (by activity / IP / name) |
+| **Device List** | All connected hosts with status, IP, MAC, connection type, sorting, search, internet blocking + **delete function for offline devices** |
+| **Device Detail** | Rename device (with umlaut sanitiser), reserve a fixed DHCP IP, block/unblock internet, remove device from the FRITZ!Box list |
+| **Network** | LAN, WAN, WLAN, DHCP – details at a glance; **Mesh topology visualisation** with mesh and radial network view; **WLAN on/off per SSID** (e.g. guest access); WLAN password editable inline |
+| **Traffic** | Live download/upload chart (30 s tick, 30 min history) + statistics for Today, Yesterday, Week, Month, Last Month |
+| **Telephony** | Call list (caller/called/device separated, type filter) and DECT handsets – **clean separation from SmartHome** (DECT actors like FRITZ!DECT 200/301 only appear under SmartHome) |
+| **SmartHome** | Overview of all AHA devices (sockets, thermostats, sensors, RolloTron) with temperature, switch state and power consumption |
+| **System** | Fritz!Box model, firmware, uptime, serial number, reboot function; HA sensor configuration, debug logging, „keep session alive" toggle |
+| **HA Sensors** | CPU, RAM, temp, devices, free IPs, download, upload, traffic counters – automatically pushed as sensors to Home Assistant |
 | **MQTT Discovery** | Default transfer method: all sensors are registered via MQTT as a grouped „FRITZ!Portal" device in the HA device overview |
 | **REST API Fallback** | Optionally enabled for users without an MQTT broker – sensors then appear as individual entities |
-| **Dark / Light Mode** | Reactive theme without page reload |
-| **Ingress** | Full integration into the Home Assistant interface |
+| **Languages** | **Fully German / English** switchable via DE/EN pill in the header, selection is persisted |
+| **Dark / Light Mode** | Reactive theme (TERMINAL.OS Slate · Blue) without page reload |
+| **Ingress** | Full integration into the Home Assistant interface, no port forwarding required |
 
 ---
 
@@ -79,19 +82,24 @@ If you like the App, I would appreciate a Star rating ⭐ from you. 🤗
 | `ha_sensors` | Enable REST API fallback (only needed without MQTT broker) | `false` |
 | `ha_sensors_interval` | System sensor interval (seconds) | `60` |
 | `ha_sensors_traffic_interval` | Traffic sensor interval (seconds) | `300` |
+| `keep_session_alive` | Keep the FRITZ!Box session permanently open – required for continuous HA sensor updates even when the portal is not actively opened. **Increases load on the FRITZ!Box and can compete with HA's built-in Fritz!SmartHome integration** – only enable when the sensors really must be updated 24/7. | `false` |
+| `debug_logging` | Log all API requests (TR-064, data.lua) to the protocol – useful for troubleshooting, otherwise leave off | `false` |
 
 4. **Save → Start**
 5. Open via **Web UI** or directly at `http://<ha-ip>:3003`
 
 > **Note:** The app automatically logs in to the Fritz!Box with the configured credentials on startup – no manual login required.
 
-> **Fritz!Box Permissions:** The Fritz!Box user you configure needs the following permissions for the app to work correctly:
-> - **Telephony** (for call log and DECT handsets)
-> - **Devices and WLAN** (for host list, IP management and blocking functions)
-> - **System** (for firmware, CPU, RAM, temperature and reboot function)
-> - **Smart Home** (optional, only for smart home devices)
-> 
-> These permissions are usually created automatically for new users in the Fritz!Box. If the app does not have access to certain functions, please adjust the permissions under **Fritz!Box → System → Users** accordingly.
+> **Fritz!Box Permissions:** The Fritz!Box user you configure needs the following permissions, otherwise individual sections of the app will not work. Configurable in the **FRITZ!Box UI → System → FRITZ!Box Users → [Edit user]**:
+>
+> | Permission | Required for |
+> |---|---|
+> | **FRITZ!Box settings** | Model/firmware, CPU/RAM/temperature, reboot, WLAN configuration (incl. guest access on/off), DHCP reservations, deleting devices from the host list, internet blocking |
+> | **Voicemail, fax messages, FRITZ!App Fon and call list** | Call list on the telephony page |
+> | **Smart Home** | SmartHome devices (sockets, thermostats, sensors, blinds) |
+> | **VPN** | optional, only if the box is reachable via VPN |
+>
+> Additionally the option **"Allow access for applications"** must be enabled under **Home Network → Network → Network Settings** – otherwise TR-064 requests are rejected with `401 Invalid Action`.
 
 > **MQTT Discovery:** FRITZ!Portal **always sends sensor data via MQTT** to Home Assistant automatically. All sensors are registered as a single **„FRITZ!Portal"** device in the HA device overview, where they can be individually renamed, categorised and used on dashboards.
 >
