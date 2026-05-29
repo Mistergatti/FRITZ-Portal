@@ -13,6 +13,7 @@
   <img src="https://img.shields.io/badge/Architecture-amd64%20%7C%20aarch64%20%7C%20armhf-green" alt="Arch"/>
   <img src="https://img.shields.io/badge/License-MIT-lightgrey" alt="License"/>
   <img src="https://img.shields.io/badge/Downloads-7.9K-blue" alt="Downloads"/>
+  <a href="README.md"><img src="https://img.shields.io/badge/README-De-lightblue" alt="Deutsch"/></a>
 </p>
 <p align="center">
 If you like the App, I would appreciate a Star rating ⭐ from you. 🤗 

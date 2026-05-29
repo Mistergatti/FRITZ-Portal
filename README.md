@@ -12,6 +12,7 @@
   <img src="https://img.shields.io/badge/Architektur-amd64%20%7C%20aarch64%20%7C%20armv7-green" alt="Arch"/>
   <img src="https://img.shields.io/badge/Lizenz-MIT-lightgrey" alt="Lizenz"/>  
   <img src="https://img.shields.io/badge/Downloads-7.9K-blue" alt="Downloads"/>
+  <a href="README_eng.md"><img src="https://img.shields.io/badge/README-Eng-lightblue" alt="English"/></a>
 </p>
 <p align="center">
 Wenn euch die App gefällt, würde ich mich über eine Sternebewertung ⭐ freuen. 🤗  
