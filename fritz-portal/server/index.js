@@ -178,6 +178,13 @@ const lastSeenMap = new Map();
 // ── Traffic history für Dashboard-Chart (server-seitig, alle 10 Sekunden) ──
 const trafficHistory = { down: [], up: [] };
 
+// ── Last-known Total-Byte-Counter pro Session ──
+// Wird genutzt, um auf Cable-/5G-Boxen (6660/6690/6860 5G, …) die Live-Rate aus
+// dem Delta der monoton steigenden TotalBytes-Counter zu derivieren – diese Boxen
+// liefern weder `sync_groups` aus data.lua?page=netMon noch sinnvolle
+// `NewByteReceiveRate`/`NewByteSendRate`-Werte aus GetAddonInfos.
+const lastTotalBytes = new Map(); // sid -> { totalDown, totalUp, ts }
+
 // ── Eco-Stats history für Dashboard-Popovers (CPU/RAM/Temp, 1h, alle 10 Sekunden) ──
 const ecoHistory = { cpu: [], ram: [], temp: [] };
 
@@ -276,7 +283,10 @@ setInterval(async () => {
           }
         }
       } catch {}
-      // Fallback: GetAddonInfos wenn netMon nichts lieferte
+      // Fallback: GetAddonInfos wenn netMon nichts lieferte. Cable-/5G-Boxen (6660/6690/6860
+      // 5G, …) füllen `sync_groups` nicht aus und lassen `NewByteReceiveRate`/`NewByteSendRate`
+      // ebenfalls leer/0 – als letzte Stufe rechnen wir die Rate aus dem Delta der monoton
+      // steigenden TotalBytes-Counter zwischen zwei Collector-Ticks.
       if (downBps === 0 && upBps === 0) {
         try {
           let addonInfo = await soapRequest(session.host, 'urn:schemas-upnp-org:service:WANCommonInterfaceConfig:1', 'GetAddonInfos', session.username, session.password, session.controlUrls);
@@ -284,7 +294,21 @@ setInterval(async () => {
             addonInfo = await soapRequest(session.host, 'urn:dslforum-org:service:WANCommonInterfaceConfig:1', 'GetAddonInfos', session.username, session.password, session.controlUrls);
           }
           downBps = parseInt(addonInfo['NewByteReceiveRate'] || '0', 10) || 0;
-          upBps = parseInt(addonInfo['NewByteSendRate'] || '0', 10) || 0;
+          upBps   = parseInt(addonInfo['NewByteSendRate']    || '0', 10) || 0;
+          if (downBps === 0 && upBps === 0) {
+            const totalDown = parseInt(addonInfo['NewX_AVM_DE_TotalBytesReceived64'] || addonInfo['NewTotalBytesReceived'] || '0', 10) || 0;
+            const totalUp   = parseInt(addonInfo['NewX_AVM_DE_TotalBytesSent64']     || addonInfo['NewTotalBytesSent']     || '0', 10) || 0;
+            const prev = lastTotalBytes.get(sid);
+            const now  = Date.now();
+            if (prev && totalDown >= prev.totalDown && totalUp >= prev.totalUp) {
+              const dt = (now - prev.ts) / 1000;
+              if (dt > 0 && dt < 600) {
+                downBps = Math.round((totalDown - prev.totalDown) / dt);
+                upBps   = Math.round((totalUp   - prev.totalUp)   / dt);
+              }
+            }
+            if (totalDown > 0 || totalUp > 0) lastTotalBytes.set(sid, { totalDown, totalUp, ts: now });
+          }
         } catch {}
       }
       const now = Date.now();
@@ -959,7 +983,10 @@ app.get('/api/fritz/network-stats', async (req, res) => {
   const session = sessions.get(sid);
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
 
-  const cached = getCached('network-stats');
+  // Längere Read-TTL als der Default (10 s), damit zwischen den Collector-Ticks (30 s)
+  // nicht jede Browser-Abfrage netMon/GetAddonInfos neu trifft – wichtig für Cable-/5G-
+  // Boxen, bei denen die Live-Rate sowieso aus dem Collector-Delta kommt.
+  const cached = getCached('network-stats', 35000);
   if (cached) return res.json(cached);
 
   let downBps = 0, upBps = 0, dsHistory = [], usHistory = [];
@@ -987,7 +1014,8 @@ app.get('/api/fritz/network-stats', async (req, res) => {
     }
   } catch (e) { console.error('NetworkMonitor error:', e.message); }
 
-  // Fallback: GetAddonInfos für Live-Speeds
+  // Fallback: GetAddonInfos für Live-Speeds. Letzte Stufe (Cable-/5G-Boxen wie 6660/6690/
+  // 6860 5G): Rate aus Delta der TotalBytes-Counter zwischen Aufrufen ableiten.
   if (downBps === 0 && upBps === 0) {
     try {
       let addonInfo = await soapRequest(session.host, 'urn:schemas-upnp-org:service:WANCommonInterfaceConfig:1', 'GetAddonInfos', session.username, session.password, session.controlUrls);
@@ -995,7 +1023,21 @@ app.get('/api/fritz/network-stats', async (req, res) => {
         addonInfo = await soapRequest(session.host, 'urn:dslforum-org:service:WANCommonInterfaceConfig:1', 'GetAddonInfos', session.username, session.password, session.controlUrls);
       }
       downBps = parseInt(addonInfo['NewByteReceiveRate'] || '0', 10) || 0;
-      upBps = parseInt(addonInfo['NewByteSendRate'] || '0', 10) || 0;
+      upBps   = parseInt(addonInfo['NewByteSendRate']    || '0', 10) || 0;
+      if (downBps === 0 && upBps === 0) {
+        const totalDownNow = parseInt(addonInfo['NewX_AVM_DE_TotalBytesReceived64'] || addonInfo['NewTotalBytesReceived'] || '0', 10) || 0;
+        const totalUpNow   = parseInt(addonInfo['NewX_AVM_DE_TotalBytesSent64']     || addonInfo['NewTotalBytesSent']     || '0', 10) || 0;
+        const prev = lastTotalBytes.get(sid);
+        const now  = Date.now();
+        if (prev && totalDownNow >= prev.totalDown && totalUpNow >= prev.totalUp) {
+          const dt = (now - prev.ts) / 1000;
+          if (dt > 0 && dt < 600) {
+            downBps = Math.round((totalDownNow - prev.totalDown) / dt);
+            upBps   = Math.round((totalUpNow   - prev.totalUp)   / dt);
+          }
+        }
+        if (totalDownNow > 0 || totalUpNow > 0) lastTotalBytes.set(sid, { totalDown: totalDownNow, totalUp: totalUpNow, ts: now });
+      }
     } catch (e) { console.error('AddonInfos fallback error:', e.message); }
   }
 
@@ -2554,15 +2596,17 @@ async function pushFastSensorsToHA() {
     await publishMqtt('fritzportal/download_speed/state', dl);
     await publishMqtt('fritzportal/upload_speed/state', ul);
   }
-  // REST-API Fallback: zusätzlich wenn aktiviert
+  // REST-API Fallback: zusätzlich wenn aktiviert.
+  // state_class='measurement' aktiviert HA-Langzeit-Statistik (mean/min/max), damit die
+  // Sensoren in HA-Statistik-Diagrammen verwendbar sind (Forums-Wunsch v1.4.4).
   if (haSensorsEnabled) {
-    await setState('sensor.fritzportal_cpu',            lastKnownFast.cpu,      { unit_of_measurement: '%',   friendly_name: 'FRITZ!Portal CPU-Auslastung',    icon: 'mdi:chip',            unique_id: 'fritzportal_rest_cpu' });
-    await setState('sensor.fritzportal_ram',            lastKnownFast.ram,      { unit_of_measurement: '%',   friendly_name: 'FRITZ!Portal RAM-Auslastung',    icon: 'mdi:memory',          unique_id: 'fritzportal_rest_ram' });
-    await setState('sensor.fritzportal_temperature',    lastKnownFast.cpu_temp, { unit_of_measurement: '°C',  friendly_name: 'FRITZ!Portal CPU-Temperatur',    icon: 'mdi:thermometer',     unique_id: 'fritzportal_rest_temperature',    device_class: 'temperature' });
-    await setState('sensor.fritzportal_online_devices', lastKnownFast.online,   { unit_of_measurement: '',    friendly_name: 'FRITZ!Portal Geräte online',     icon: 'mdi:devices',         unique_id: 'fritzportal_rest_online_devices' });
-    await setState('sensor.fritzportal_free_ips',       lastKnownFast.free_ips, { unit_of_measurement: '',    friendly_name: 'FRITZ!Portal Freie IP-Adressen', icon: 'mdi:ip-network',      unique_id: 'fritzportal_rest_free_ips' });
-    await setState('sensor.fritzportal_download_speed', dl, { unit_of_measurement: 'MB/s', friendly_name: 'FRITZ!Portal Download aktuell',  icon: 'mdi:download', device_class: 'data_rate', unique_id: 'fritzportal_rest_download_speed' });
-    await setState('sensor.fritzportal_upload_speed',   ul, { unit_of_measurement: 'MB/s', friendly_name: 'FRITZ!Portal Upload aktuell',    icon: 'mdi:upload',   device_class: 'data_rate', unique_id: 'fritzportal_rest_upload_speed' });
+    await setState('sensor.fritzportal_cpu',            lastKnownFast.cpu,      { unit_of_measurement: '%',   friendly_name: 'FRITZ!Portal CPU-Auslastung',    icon: 'mdi:chip',            unique_id: 'fritzportal_rest_cpu',            state_class: 'measurement' });
+    await setState('sensor.fritzportal_ram',            lastKnownFast.ram,      { unit_of_measurement: '%',   friendly_name: 'FRITZ!Portal RAM-Auslastung',    icon: 'mdi:memory',          unique_id: 'fritzportal_rest_ram',            state_class: 'measurement' });
+    await setState('sensor.fritzportal_temperature',    lastKnownFast.cpu_temp, { unit_of_measurement: '°C',  friendly_name: 'FRITZ!Portal CPU-Temperatur',    icon: 'mdi:thermometer',     unique_id: 'fritzportal_rest_temperature',    device_class: 'temperature', state_class: 'measurement' });
+    await setState('sensor.fritzportal_online_devices', lastKnownFast.online,   { unit_of_measurement: '',    friendly_name: 'FRITZ!Portal Geräte online',     icon: 'mdi:devices',         unique_id: 'fritzportal_rest_online_devices', state_class: 'measurement' });
+    await setState('sensor.fritzportal_free_ips',       lastKnownFast.free_ips, { unit_of_measurement: '',    friendly_name: 'FRITZ!Portal Freie IP-Adressen', icon: 'mdi:ip-network',      unique_id: 'fritzportal_rest_free_ips',       state_class: 'measurement' });
+    await setState('sensor.fritzportal_download_speed', dl, { unit_of_measurement: 'MB/s', friendly_name: 'FRITZ!Portal Download aktuell',  icon: 'mdi:download', device_class: 'data_rate', unique_id: 'fritzportal_rest_download_speed', state_class: 'measurement' });
+    await setState('sensor.fritzportal_upload_speed',   ul, { unit_of_measurement: 'MB/s', friendly_name: 'FRITZ!Portal Upload aktuell',    icon: 'mdi:upload',   device_class: 'data_rate', unique_id: 'fritzportal_rest_upload_speed',   state_class: 'measurement' });
   }
 }
 
@@ -2584,8 +2628,11 @@ async function pushTrafficSensorsToHA() {
     if (row.received > 0) lastKnownTraffic[row.name + '_dl'] = row.received;
     if (row.sent     > 0) lastKnownTraffic[row.name + '_ul'] = row.sent;
   });
+  // Einheit für REST-API-Traffic-Sensoren bewusst stabil auf GB – HA Long-Term-Statistik
+  // erlaubt keinen Unit-Wechsel über die Zeit, sonst werden Datenpunkte verworfen oder die
+  // Statistik bricht ab. Forums-Wunsch (v1.4.4): GB statt MB für übersichtlichere
+  // Statistik-Diagramme, da sich die Y-Achseneinheit im HA-Statistik-Chart nicht ändern lässt.
   function bytesToHaValue(bytes) {
-    if (bytes < 1024 * 1024 * 1024) return { value: +(bytes / (1024 * 1024)).toFixed(2), unit: 'MB' };
     return { value: +(bytes / (1024 * 1024 * 1024)).toFixed(3), unit: 'GB' };
   }
   // MQTT: Traffic-Daten immer senden wenn Broker erreichbar
@@ -2607,8 +2654,8 @@ async function pushTrafficSensorsToHA() {
       const lbl = names[i];
       const rx = bytesToHaValue(row.received);
       const tx = bytesToHaValue(row.sent);
-      await setState(`sensor.fritzportal_traffic_${k}_received`, rx.value, { unit_of_measurement: rx.unit, friendly_name: `FRITZ!Portal Download ${lbl}`, icon: 'mdi:download-network', device_class: 'data_size', unique_id: `fritzportal_rest_traffic_${k}_received` });
-      await setState(`sensor.fritzportal_traffic_${k}_sent`,     tx.value, { unit_of_measurement: tx.unit, friendly_name: `FRITZ!Portal Upload ${lbl}`,   icon: 'mdi:upload-network',   device_class: 'data_size', unique_id: `fritzportal_rest_traffic_${k}_sent` });
+      await setState(`sensor.fritzportal_traffic_${k}_received`, rx.value, { unit_of_measurement: rx.unit, friendly_name: `FRITZ!Portal Download ${lbl}`, icon: 'mdi:download-network', device_class: 'data_size', state_class: 'total', unique_id: `fritzportal_rest_traffic_${k}_received` });
+      await setState(`sensor.fritzportal_traffic_${k}_sent`,     tx.value, { unit_of_measurement: tx.unit, friendly_name: `FRITZ!Portal Upload ${lbl}`,   icon: 'mdi:upload-network',   device_class: 'data_size', state_class: 'total', unique_id: `fritzportal_rest_traffic_${k}_sent` });
     }
   }
 }

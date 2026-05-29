@@ -24,7 +24,7 @@ interface AppCache {
 }
 
 const CACHE_TTL = 600000; // 10 minutes
-const APP_VERSION = '1.4.3';
+const APP_VERSION = '1.4.4';
 
 function getApiCache(key: string): any {
   const cached = (window as any).__apiCache?.[key];
