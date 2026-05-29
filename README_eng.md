@@ -9,10 +9,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=home-assistant&logoColor=white" alt="HA App"/>
-  <img src="https://img.shields.io/badge/Version-1.4.3-blue" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.4.4-blue" alt="Version"/>
   <img src="https://img.shields.io/badge/Architecture-amd64%20%7C%20aarch64%20%7C%20armhf-green" alt="Arch"/>
   <img src="https://img.shields.io/badge/License-MIT-lightgrey" alt="License"/>
-  <img src="https://img.shields.io/badge/Downloads-6.4K-blue" alt="Downloads"/>
+  <img src="https://img.shields.io/badge/Downloads-7.9K-blue" alt="Downloads"/>
 </p>
 <p align="center">
 If you like the App, I would appreciate a Star rating ⭐ from you. 🤗 
