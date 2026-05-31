@@ -20,7 +20,7 @@ const navItems: { page: Page; label: string }[] = [
   { page: 'system',    label: 'System' },
 ];
 
-export default function Header({ currentPage, onNavigate, version = '1.4.4' }: HeaderProps) {
+export default function Header({ currentPage, onNavigate, version = '1.4.5' }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const { lang, setLang, t } = useI18n();
   const isDark = theme === 'dark';

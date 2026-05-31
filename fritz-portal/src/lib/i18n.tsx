@@ -301,6 +301,8 @@ const EN: Record<string, string> = {
   'Intervall Systemsensoren (Sekunden)': 'System sensor interval (seconds)',
   'Intervall Traffic-Sensoren (Sekunden)': 'Traffic sensor interval (seconds)',
   'Debug-Logging': 'Debug logging',
+  'Traffic-Verlauf serverseitig sammeln': 'Collect traffic history on the server',
+  'Der Server sammelt den Download-/Upload-Verlauf der letzten 30 min durchgehend – auch wenn das Portal nicht geöffnet ist. Das Dashboard-Chart ist beim Zurückkehren sofort lückenlos gefüllt. Kostet etwas mehr FRITZ!Box-Last. (Ohne diese Option wird der Verlauf nur im Browser gespeichert und kann nach längerer Abwesenheit kurz veraltet sein.)': 'The server continuously collects the download/upload history of the last 30 min – even when the portal is not open. The dashboard chart is fully filled immediately when you return. Costs slightly more FRITZ!Box load. (Without this option the history is only stored in the browser and may be briefly outdated after a longer absence.)',
   'Gespeichert': 'Saved',
   'Speichern fehlgeschlagen.': 'Save failed.',
   'HA Supervisor': 'HA Supervisor',

@@ -1,5 +1,6 @@
 import express from 'express';
 import DigestFetch from 'digest-fetch';
+import mqtt from 'mqtt';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
@@ -70,6 +71,7 @@ try {
     if (opts.ha_sensors_interval          !== undefined && !process.env.HA_SENSORS_INTERVAL)          process.env.HA_SENSORS_INTERVAL          = String(opts.ha_sensors_interval);
     if (opts.ha_sensors_traffic_interval  !== undefined && !process.env.HA_SENSORS_TRAFFIC_INTERVAL)  process.env.HA_SENSORS_TRAFFIC_INTERVAL  = String(opts.ha_sensors_traffic_interval);
     if (opts.keep_session_alive           !== undefined && !process.env.KEEP_SESSION_ALIVE)            process.env.KEEP_SESSION_ALIVE           = String(opts.keep_session_alive);
+    if (opts.traffic_history_server       !== undefined && !process.env.TRAFFIC_HISTORY_SERVER)        process.env.TRAFFIC_HISTORY_SERVER       = String(opts.traffic_history_server);
     if (opts.debug_logging !== undefined) debugLogging = !!opts.debug_logging;
     console.log('HA Add-on: Fritz!Box-Optionen geladen (' + opts.fritzbox_host + ')' + (debugLogging ? ' [Debug-Logging aktiv]' : ''));
   }
@@ -169,7 +171,7 @@ async function getCachedWebSid(session) {
 }
 
 // ── Letzter bekannter Wert für HA-Sensoren (verhindert Null-Sprünge bei abgelaufenem Cache) ──
-const lastKnownFast    = { cpu: 0, ram: 0, cpu_temp: 0, online: 0, free_ips: 0 };
+const lastKnownFast    = { cpu: 0, ram: 0, cpu_temp: 0, online: 0, free_ips: 0, activeHosts: [] };
 const lastKnownTraffic = {};
 
 // MAC → Unix-Timestamp (Sek.), wann Gerät zuletzt als aktiv gesehen wurde
@@ -254,10 +256,11 @@ setInterval(async () => {
     // Fritz!SmartHome-Integration den AHA-Endpoint und data.lua ohne Konkurrenz nutzen
     // kann. Ein neuer API-Call vom Browser hebt den Idle-Status sofort wieder auf
     // (lastUsed wird in der express-Middleware aktualisiert).
-    if (!keepSessionAlive) {
-      const lastUsed = session.lastUsed || 0;
-      if (Date.now() - lastUsed > SESSION_IDLE_MS) continue;
-    }
+    const idle = !keepSessionAlive && (Date.now() - (session.lastUsed || 0) > SESSION_IDLE_MS);
+    // Ausnahme: Bei `trafficHistoryServer` sammeln wir im Idle weiterhin NUR den
+    // Traffic-Verlauf (leichter netMon-/AddonInfos-Call), damit das Dashboard-Chart
+    // lückenlos bleibt. Der schwerere Eco-/Hosts-Teil bleibt im Idle ausgesetzt.
+    if (idle && !trafficHistoryServer) continue;
     try {
       // Primär: data.lua?page=netMon – dieselbe Quelle, die die Fritz!Box-UI für den Live-Graph
       // nutzt. Liefert pro Sync-Gruppe eine Historie der letzten Sekunden als `ds_bps_curr` /
@@ -321,7 +324,8 @@ setInterval(async () => {
       const existingNet = getCached('network-stats', 120000) || {};
       setCached('network-stats', { ...existingNet, currentDown: downBps, currentUp: upBps });
     } catch {}
-    try { await collectEcoHistory(session); } catch {}
+    // Eco-/Hosts-Historie nur im Nicht-Idle-Betrieb (im Idle nur Traffic, s. o.)
+    if (!idle) { try { await collectEcoHistory(session); } catch {} }
   }
 }, 30000); // 30s-Tick (vorher 15s) – halbiert die FritzBox-Last des Background-Collectors,
            // ohne dass der Dashboard-Chart spürbar weniger Detail bietet (60 Punkte → 30 min Verlauf).
@@ -1058,7 +1062,16 @@ app.get('/api/fritz/network-stats', async (req, res) => {
     totalUp = parseInt(addonInfo['NewX_AVM_DE_TotalBytesSent64'] || addonInfo['NewTotalBytesSent'] || '0', 10) || 0;
   } catch (e) { console.error('AddonInfos error:', e.message); }
 
-  const result = { currentDown: downBps, currentUp: upBps, totalDown, totalUp, dsHistory, usHistory };
+  // Serverseitiger 30-min-Verlauf mit echten Timestamps – das Frontend nutzt ihn
+  // (wenn ausreichend Punkte vorhanden) zum sofortigen, lückenlosen Initial-Fill des
+  // Dashboard-Charts. Wird durchgehend gefüllt wenn `traffic_history_server` aktiv ist.
+  const histNow = Date.now();
+  // down/up werden im Collector im Gleichschritt gepusht → gleiche Länge & Timestamps.
+  const serverHistory = trafficHistory.down
+    .map((p, i) => ({ t: p.time, down: p.value, up: trafficHistory.up[i]?.value || 0 }))
+    .filter(p => histNow - p.t <= 30 * 60 * 1000);
+
+  const result = { currentDown: downBps, currentUp: upBps, totalDown, totalUp, dsHistory, usHistory, serverHistory };
   setCached('network-stats', result);
   return res.json(result);
 });
@@ -1466,19 +1479,44 @@ app.get('/api/fritz/network/wlan', async (req, res) => {
 
 // WLAN (z. B. Gastzugang) ein-/ausschalten. TR-064-`SetEnable` braucht in der
 // Fritz!Box-Benutzerverwaltung „FRITZ!Box-Einstellungen" inkl. Schreibrecht.
+// Helper wird sowohl vom REST-Endpoint als auch vom MQTT-Command-Handler genutzt.
+async function setWlanEnable(session, index, enable) {
+  const svc = `urn:dslforum-org:service:WLANConfiguration:${index}`;
+  await soapRequest(session.host, svc, 'SetEnable', session.username, session.password, session.controlUrls, {
+    NewEnable: enable ? '1' : '0',
+  });
+  // Cache invalidieren, damit der nächste Lesevorgang den neuen Status liefert
+  cache.delete('network-wlan');
+}
+
+// Liest den Enable-Status aller WLAN-Konfigurationen (Index 1–4). 30 s gecacht unter
+// `network-wlan`. Liefert nur tatsächlich vorhandene WLANs (GetInfo erfolgreich).
+async function getWlanStates(session) {
+  const cached = getCached('network-wlan', 30000);
+  if (cached) return cached;
+  const states = [];
+  for (let i = 1; i <= 4; i++) {
+    try {
+      const svc = `urn:dslforum-org:service:WLANConfiguration:${i}`;
+      const info = await soapRequest(session.host, svc, 'GetInfo', session.username, session.password, session.controlUrls);
+      if (!info || typeof info !== 'object' || info.NewSSID === undefined) continue;
+      const ssid = decodeXmlEntities(info.NewSSID || '');
+      const enabled = info.NewStatus === 'Up' || info.NewEnable === '1' || info.NewEnable === 1;
+      states.push({ index: i, ssid, enabled, label: ssid || `WLAN ${i}` });
+    } catch {}
+  }
+  if (states.length) setCached('network-wlan', states);
+  return states;
+}
+
 app.post('/api/fritz/network/wlan/enable', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   const session = sessions.get(sid);
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
   const { index, enable } = req.body || {};
   if (!index || enable === undefined) return res.status(400).json({ error: 'index und enable erforderlich' });
-  const svc = `urn:dslforum-org:service:WLANConfiguration:${index}`;
   try {
-    await soapRequest(session.host, svc, 'SetEnable', session.username, session.password, session.controlUrls, {
-      NewEnable: enable ? '1' : '0',
-    });
-    // Cache invalidieren, damit das nächste GET den neuen Status liefert
-    cache.delete('network-wlan');
+    await setWlanEnable(session, index, enable);
     return res.json({ success: true });
   } catch (err) {
     console.error(`WLAN ${index} SetEnable error:`, err.message);
@@ -2444,14 +2482,19 @@ let haTrafficIntervalSec = Math.max(30,  parseInt(process.env.HA_SENSORS_TRAFFIC
 // Default: aus. Wer dauerhafte HA-Sensor-Updates braucht, muss die Option in der
 // System-Page (oder per Add-on-Config) explizit aktivieren.
 let keepSessionAlive     = process.env.KEEP_SESSION_ALIVE === 'true';
+// Default: aus. Wenn an, sammelt der Background-Collector den Traffic-Verlauf
+// durchgehend (auch bei geschlossenem Portal), damit das Dashboard-Chart beim
+// Zurückkehren die kompletten 30 min zeigt – kostet etwas mehr FritzBox-Last.
+let trafficHistoryServer = process.env.TRAFFIC_HISTORY_SERVER === 'true';
 
 try {
   if (existsSync(SETTINGS_FILE)) {
     const s = JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8'));
-    if (s.ha_sensors !== undefined)         haSensorsEnabled     = !!s.ha_sensors;
-    if (s.ha_sensors_interval)              haFastIntervalSec    = Math.max(10,  parseInt(s.ha_sensors_interval,        10));
-    if (s.ha_sensors_traffic_interval)      haTrafficIntervalSec = Math.max(30,  parseInt(s.ha_sensors_traffic_interval, 10));
-    if (s.keep_session_alive !== undefined) keepSessionAlive     = !!s.keep_session_alive;
+    if (s.ha_sensors !== undefined)             haSensorsEnabled     = !!s.ha_sensors;
+    if (s.ha_sensors_interval)                  haFastIntervalSec    = Math.max(10,  parseInt(s.ha_sensors_interval,        10));
+    if (s.ha_sensors_traffic_interval)          haTrafficIntervalSec = Math.max(30,  parseInt(s.ha_sensors_traffic_interval, 10));
+    if (s.keep_session_alive !== undefined)     keepSessionAlive     = !!s.keep_session_alive;
+    if (s.traffic_history_server !== undefined) trafficHistoryServer = !!s.traffic_history_server;
   }
 } catch {}
 
@@ -2490,7 +2533,7 @@ const MQTT_SENSORS = [
   { id: 'cpu',            name: 'CPU-Auslastung',     unit: '%',   icon: 'mdi:chip',           device_class: null,          state_class: 'measurement' },
   { id: 'ram',            name: 'RAM-Auslastung',     unit: '%',   icon: 'mdi:memory',         device_class: null,          state_class: 'measurement' },
   { id: 'temperature',    name: 'CPU-Temperatur',     unit: '°C',  icon: 'mdi:thermometer',    device_class: 'temperature', state_class: 'measurement' },
-  { id: 'online_devices', name: 'Geräte online',      unit: '',    icon: 'mdi:devices',        device_class: null,          state_class: 'measurement' },
+  { id: 'online_devices', name: 'Geräte online',      unit: '',    icon: 'mdi:devices',        device_class: null,          state_class: 'measurement', json_attributes: true },
   { id: 'free_ips',       name: 'Freie IP-Adressen',  unit: '',    icon: 'mdi:ip-network',     device_class: null,          state_class: 'measurement' },
   { id: 'download_speed', name: 'Download aktuell',   unit: 'MB/s',icon: 'mdi:download',       device_class: 'data_rate',   state_class: 'measurement' },
   { id: 'upload_speed',   name: 'Upload aktuell',     unit: 'MB/s',icon: 'mdi:upload',         device_class: 'data_rate',   state_class: 'measurement' },
@@ -2519,6 +2562,8 @@ async function publishMqttDiscovery() {
       state_topic: `fritzportal/${s.id}/state`,
       unit_of_measurement: s.unit || undefined, icon: s.icon,
       device_class: s.device_class || undefined, state_class: s.state_class || undefined,
+      // Geräte-online: aktive Hosts (Name/IP/Typ) als Attribute mitliefern
+      json_attributes_topic: s.json_attributes ? `fritzportal/${s.id}/attributes` : undefined,
       device,
     };
     if (await publishMqtt(`homeassistant/sensor/fritzportal_${s.id}/config`, config, true)) registered++;
@@ -2542,6 +2587,34 @@ async function publishMqttDiscovery() {
   console.log(`MQTT Discovery: ${registered}/${total} Sensoren registriert`);
 }
 
+// ── WLAN-Schalter (MQTT-Switch mit command_topic) ──
+// Discovery wird erst publiziert, sobald wir eine WLAN-Liste von der Box haben (Session
+// nötig). Welche Indizes existieren, hängt vom Modell ab – daher dynamisch.
+let wlanDiscoveryPublished = false;
+const wlanDiscoveredIdx = new Set();
+
+async function publishWlanDiscovery(states) {
+  const device = fritzboxDevice();
+  for (const w of states) {
+    const config = {
+      name: `WLAN ${w.label}`,
+      unique_id:    `fritzportal_wlan_${w.index}`,
+      object_id:    `fritzportal_wlan_${w.index}`,
+      command_topic: `fritzportal/wlan/${w.index}/set`,
+      state_topic:   `fritzportal/wlan/${w.index}/state`,
+      payload_on: 'ON', payload_off: 'OFF',
+      icon: 'mdi:wifi',
+      optimistic: false,
+      device,
+    };
+    if (await publishMqtt(`homeassistant/switch/fritzportal_wlan_${w.index}/config`, config, true)) {
+      wlanDiscoveredIdx.add(w.index);
+    }
+  }
+  wlanDiscoveryPublished = true;
+  console.log(`MQTT Discovery: ${wlanDiscoveredIdx.size} WLAN-Schalter registriert`);
+}
+
 async function removeMqttDiscovery() {
   for (const s of MQTT_SENSORS) {
     await publishMqtt(`homeassistant/sensor/fritzportal_${s.id}/config`, '', true);
@@ -2551,8 +2624,73 @@ async function removeMqttDiscovery() {
       await publishMqtt(`homeassistant/sensor/fritzportal_traffic_${t.suffix}_${dir}/config`, '', true);
     }
   }
+  for (const idx of wlanDiscoveredIdx) {
+    await publishMqtt(`homeassistant/switch/fritzportal_wlan_${idx}/config`, '', true);
+  }
+  wlanDiscoveredIdx.clear();
+  wlanDiscoveryPublished = false;
   mqttAvailable = false;
   console.log('MQTT Discovery: Konfigurationen entfernt');
+}
+
+// ── Echte MQTT-Broker-Verbindung – ausschließlich zum Empfangen der Schaltbefehle.
+// Sensor-/State-Publishes laufen weiterhin über den Supervisor-Proxy (publishMqtt).
+// Broker-Zugangsdaten kommen aus der Supervisor-Service-Discovery.
+let mqttBrokerClient = null;
+
+async function connectMqttBroker() {
+  if (!HA_TOKEN || mqttBrokerClient) return;
+  let info;
+  try {
+    const r = await fetch('http://supervisor/services/mqtt', {
+      headers: { 'Authorization': `Bearer ${HA_TOKEN}` },
+    });
+    if (!r.ok) { console.log(`MQTT-Broker: Service-Discovery nicht verfügbar (HTTP ${r.status}) – WLAN-Schalter inaktiv`); return; }
+    info = (await r.json())?.data;
+  } catch (e) {
+    console.log('MQTT-Broker: Service-Discovery fehlgeschlagen – WLAN-Schalter inaktiv:', e.message);
+    return;
+  }
+  if (!info?.host) { console.log('MQTT-Broker: keine Broker-Daten – WLAN-Schalter inaktiv'); return; }
+  const proto = info.ssl ? 'mqtts' : 'mqtt';
+  const url = `${proto}://${info.host}:${info.port || 1883}`;
+  const client = mqtt.connect(url, {
+    username: info.username || undefined,
+    password: info.password || undefined,
+    reconnectPeriod: 15000,
+    connectTimeout: 10000,
+  });
+  mqttBrokerClient = client;
+
+  client.on('connect', () => {
+    console.log(`MQTT-Broker: verbunden (${url}) – abonniere WLAN-Schaltbefehle`);
+    client.subscribe('fritzportal/wlan/+/set', (err) => {
+      if (err) console.error('MQTT-Broker: subscribe-Fehler:', err.message);
+    });
+  });
+
+  client.on('message', async (topic, payload) => {
+    const m = topic.match(/^fritzportal\/wlan\/(\d+)\/set$/);
+    if (!m) return;
+    const index = parseInt(m[1], 10);
+    const enable = String(payload).trim().toUpperCase() === 'ON';
+    const session = [...sessions.values()][0];
+    if (!session) {
+      console.log(`MQTT-Broker: WLAN-${index}-Befehl (${enable ? 'ON' : 'OFF'}) ignoriert – keine aktive FRITZ!Box-Session (keep_session_alive aktivieren)`);
+      return;
+    }
+    try {
+      await setWlanEnable(session, index, enable);
+      console.log(`MQTT-Broker: WLAN ${index} ${enable ? 'aktiviert' : 'deaktiviert'}`);
+      // State sofort zurückspiegeln (optimistic:false → HA wartet auf state_topic)
+      await publishMqtt(`fritzportal/wlan/${index}/state`, enable ? 'ON' : 'OFF');
+    } catch (e) {
+      console.error(`MQTT-Broker: WLAN ${index} SetEnable-Fehler:`, e.message);
+    }
+  });
+
+  client.on('error', (e) => console.error('MQTT-Broker Fehler:', e.message));
+  client.on('close', () => console.log('MQTT-Broker: Verbindung getrennt – Reconnect läuft'));
 }
 
 async function setState(entityId, state, attributes = {}) {
@@ -2578,9 +2716,21 @@ async function pushFastSensorsToHA() {
   if ((eco.cpu      || 0) > 0) lastKnownFast.cpu      = eco.cpu;
   if ((eco.ram      || 0) > 0) lastKnownFast.ram      = eco.ram;
   if ((eco.cpu_temp || 0) > 0) lastKnownFast.cpu_temp = eco.cpu_temp;
-  const online = hosts.filter(h => h.active).length;
+  const activeHosts = hosts.filter(h => h.active);
+  const online = activeHosts.length;
   if (online      > 0) lastKnownFast.online   = online;
   if ((ipStats.free || 0) > 0) lastKnownFast.free_ips = ipStats.free;
+
+  // Liste der aktiven Hosts als Sensor-Attribute (Name/IP/Typ), sortiert nach
+  // letzter Aktivität (neueste zuerst) – analog zur HOSTS.ACTIVE-Liste im Dashboard.
+  // So sieht der User als Sensor-Wert die Anzahl und in den Attributen die Geräteliste.
+  if (online > 0) {
+    lastKnownFast.activeHosts = activeHosts
+      .slice()
+      .sort((a, b) => (parseInt(b.lastActivity || '0', 10) || 0) - (parseInt(a.lastActivity || '0', 10) || 0))
+      .map(h => ({ name: h.name || h.ip || h.mac, ip: h.ip || '', type: h.connType || (h.interface?.includes('802.11') ? 'WLAN' : 'LAN') }));
+  }
+  const hostAttrs = { count: lastKnownFast.online, active_hosts: lastKnownFast.activeHosts || [] };
 
   // Download/Upload: 0 ist gültiger Wert (kein Traffic), immer aktuell senden
   const dl = +(( net.currentDown || 0) / 1048576).toFixed(3);
@@ -2592,6 +2742,7 @@ async function pushFastSensorsToHA() {
     await publishMqtt('fritzportal/ram/state', lastKnownFast.ram);
     await publishMqtt('fritzportal/temperature/state', lastKnownFast.cpu_temp);
     await publishMqtt('fritzportal/online_devices/state', lastKnownFast.online);
+    await publishMqtt('fritzportal/online_devices/attributes', hostAttrs, true);
     await publishMqtt('fritzportal/free_ips/state', lastKnownFast.free_ips);
     await publishMqtt('fritzportal/download_speed/state', dl);
     await publishMqtt('fritzportal/upload_speed/state', ul);
@@ -2603,10 +2754,36 @@ async function pushFastSensorsToHA() {
     await setState('sensor.fritzportal_cpu',            lastKnownFast.cpu,      { unit_of_measurement: '%',   friendly_name: 'FRITZ!Portal CPU-Auslastung',    icon: 'mdi:chip',            unique_id: 'fritzportal_rest_cpu',            state_class: 'measurement' });
     await setState('sensor.fritzportal_ram',            lastKnownFast.ram,      { unit_of_measurement: '%',   friendly_name: 'FRITZ!Portal RAM-Auslastung',    icon: 'mdi:memory',          unique_id: 'fritzportal_rest_ram',            state_class: 'measurement' });
     await setState('sensor.fritzportal_temperature',    lastKnownFast.cpu_temp, { unit_of_measurement: '°C',  friendly_name: 'FRITZ!Portal CPU-Temperatur',    icon: 'mdi:thermometer',     unique_id: 'fritzportal_rest_temperature',    device_class: 'temperature', state_class: 'measurement' });
-    await setState('sensor.fritzportal_online_devices', lastKnownFast.online,   { unit_of_measurement: '',    friendly_name: 'FRITZ!Portal Geräte online',     icon: 'mdi:devices',         unique_id: 'fritzportal_rest_online_devices', state_class: 'measurement' });
+    await setState('sensor.fritzportal_online_devices', lastKnownFast.online,   { unit_of_measurement: '',    friendly_name: 'FRITZ!Portal Geräte online',     icon: 'mdi:devices',         unique_id: 'fritzportal_rest_online_devices', state_class: 'measurement', active_hosts: lastKnownFast.activeHosts || [] });
     await setState('sensor.fritzportal_free_ips',       lastKnownFast.free_ips, { unit_of_measurement: '',    friendly_name: 'FRITZ!Portal Freie IP-Adressen', icon: 'mdi:ip-network',      unique_id: 'fritzportal_rest_free_ips',       state_class: 'measurement' });
     await setState('sensor.fritzportal_download_speed', dl, { unit_of_measurement: 'MB/s', friendly_name: 'FRITZ!Portal Download aktuell',  icon: 'mdi:download', device_class: 'data_rate', unique_id: 'fritzportal_rest_download_speed', state_class: 'measurement' });
     await setState('sensor.fritzportal_upload_speed',   ul, { unit_of_measurement: 'MB/s', friendly_name: 'FRITZ!Portal Upload aktuell',    icon: 'mdi:upload',   device_class: 'data_rate', unique_id: 'fritzportal_rest_upload_speed',   state_class: 'measurement' });
+  }
+
+  // WLAN-Status: MQTT-Switch-State (steuerbar) + REST-Nur-Anzeige-Sensor.
+  // Benötigt eine aktive Session – getWlanStates ist 30 s gecacht.
+  const wlanSession = [...sessions.values()][0];
+  if (wlanSession) {
+    let wlanStates = [];
+    try { wlanStates = await getWlanStates(wlanSession); } catch {}
+    if (wlanStates.length) {
+      // Discovery einmalig publizieren, sobald wir wissen welche WLANs existieren
+      if (mqttAvailable && !wlanDiscoveryPublished) {
+        try { await publishWlanDiscovery(wlanStates); } catch {}
+      }
+      for (const w of wlanStates) {
+        if (mqttAvailable) {
+          await publishMqtt(`fritzportal/wlan/${w.index}/state`, w.enabled ? 'ON' : 'OFF');
+        }
+        if (haSensorsEnabled) {
+          await setState(`sensor.fritzportal_wlan_${w.index}`, w.enabled ? 'on' : 'off', {
+            friendly_name: `FRITZ!Portal WLAN ${w.label}`,
+            icon: 'mdi:wifi',
+            unique_id: `fritzportal_rest_wlan_${w.index}`,
+          });
+        }
+      }
+    }
   }
 }
 
@@ -2674,6 +2851,8 @@ function startHaTimers() {
   }
   // MQTT Discovery immer versuchen – erstellt das Gerät in HA
   publishMqttDiscovery().catch(() => {});
+  // Echte Broker-Verbindung für die WLAN-Schaltbefehle (command_topic)
+  connectMqttBroker().catch(() => {});
   const restInfo = haSensorsEnabled ? ' + REST-API Fallback aktiv' : '';
   console.log(`HA Sensor Push gestartet: MQTT Discovery${restInfo} (Systemsensoren: ${haFastIntervalSec}s, Traffic: ${haTrafficIntervalSec}s)`);
   haFastTimer    = setInterval(() => { pushFastSensorsToHA().catch(() => {}); },    haFastIntervalSec    * 1000);
@@ -2724,17 +2903,19 @@ app.get('/api/fritz/ha-settings', (req, res) => {
     mqtt_available:              mqttAvailable,
     debug_logging:               debugLogging,
     keep_session_alive:          keepSessionAlive,
+    traffic_history_server:      trafficHistoryServer,
   });
 });
 
 app.post('/api/fritz/ha-settings', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   if (!sessions.get(sid)) return res.status(401).json({ error: 'Nicht eingeloggt' });
-  const { ha_sensors, ha_sensors_interval, ha_sensors_traffic_interval, debug_logging, keep_session_alive } = req.body;
+  const { ha_sensors, ha_sensors_interval, ha_sensors_traffic_interval, debug_logging, keep_session_alive, traffic_history_server } = req.body;
   if (ha_sensors !== undefined)                  haSensorsEnabled     = !!ha_sensors;
   if (ha_sensors_interval !== undefined)         haFastIntervalSec    = Math.max(10,  parseInt(ha_sensors_interval,         10) || 60);
   if (ha_sensors_traffic_interval !== undefined) haTrafficIntervalSec = Math.max(30,  parseInt(ha_sensors_traffic_interval, 10) || 300);
   if (debug_logging !== undefined)               { debugLogging = !!debug_logging; console.log(`Debug-Logging ${debugLogging ? 'aktiviert' : 'deaktiviert'}`); }
+  if (traffic_history_server !== undefined)      { trafficHistoryServer = !!traffic_history_server; console.log(`Traffic-Verlauf serverseitig ${trafficHistoryServer ? 'aktiviert' : 'deaktiviert'}`); }
   if (keep_session_alive !== undefined) {
     const wasOn = keepSessionAlive;
     keepSessionAlive = !!keep_session_alive;
@@ -2750,6 +2931,7 @@ app.post('/api/fritz/ha-settings', async (req, res) => {
       ha_sensors_traffic_interval: haTrafficIntervalSec,
       debug_logging:               debugLogging,
       keep_session_alive:          keepSessionAlive,
+      traffic_history_server:      trafficHistoryServer,
     }));
   } catch (e) { console.error('Settings speichern fehlgeschlagen:', e.message); }
   // Sync to HA Add-on config (requires hassio_api: true)
@@ -2763,12 +2945,12 @@ app.post('/api/fritz/ha-settings', async (req, res) => {
       await fetch('http://supervisor/addons/self/options', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ options: { ...opts, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, debug_logging: debugLogging, keep_session_alive: keepSessionAlive } }),
+        body: JSON.stringify({ options: { ...opts, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, debug_logging: debugLogging, keep_session_alive: keepSessionAlive, traffic_history_server: trafficHistoryServer } }),
       });
     }
   } catch {}
   startHaTimers();
-  return res.json({ success: true, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, keep_session_alive: keepSessionAlive });
+  return res.json({ success: true, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, keep_session_alive: keepSessionAlive, traffic_history_server: trafficHistoryServer });
 });
 
 const PORT = 3003;

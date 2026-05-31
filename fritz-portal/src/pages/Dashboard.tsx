@@ -119,7 +119,11 @@ export default function Dashboard({ sid }: DashboardProps) {
   const t = useT();
   const [deviceInfo, setDeviceInfo] = useState<any>(getApiCache('device-info'));
   const [hosts, setHosts] = useState<Host[]>(getApiCache('hosts') || []);
-  const [networkData, setNetworkData] = useState<NetworkData[]>([]);
+  // Chart-Verlauf aus dem persistierten Cache initialisieren (überlebt iframe-Reload) –
+  // sofort gefüllt, kein Loading-Screen beim Zurückkehren zum Panel.
+  const [networkData, setNetworkData] = useState<NetworkData[]>(
+    getApiCache('network-history') || (window as any).__networkHistory || []
+  );
   const [ecoStats, setEcoStats] = useState<any>(getApiCache('eco-stats'));
   const [ecoSeries, setEcoSeries] = useState<{ cpu: number[]; ram: number[]; temp: number[] }>(
     getApiCache('eco-series') || { cpu: [], ram: [], temp: [] }
@@ -219,10 +223,24 @@ export default function Dashboard({ sid }: DashboardProps) {
 
           const toMbps = (b: number) => parseFloat(((b * 8) / 1_000_000).toFixed(2));
 
-          const existingHistory = (window as any).__networkHistory as NetworkData[] | undefined;
-          if (existingHistory && existingHistory.length > 0) {
-            setNetworkData(existingHistory);
+          // 1. Bevorzugt: serverseitiger Verlauf mit echten Timestamps (lückenlos, wenn
+          //    `traffic_history_server` aktiv ist) – sofort vollständig gefüllt.
+          const serverHist = (trafficData.serverHistory || []) as { t: number; down: number; up: number }[];
+          const persisted  = (getApiCache('network-history') || (window as any).__networkHistory) as NetworkData[] | undefined;
+          if (serverHist.length >= 2) {
+            const initial: NetworkData[] = serverHist.slice(-MAX_POINTS).map(p => ({
+              time: new Date(p.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+              download: toMbps(p.down || 0),
+              upload: toMbps(p.up || 0),
+            }));
+            (window as any).__networkHistory = initial;
+            setApiCache('network-history', initial);
+            setNetworkData(initial);
+          } else if (persisted && persisted.length > 0) {
+            // 2. Persistierter Verlauf aus localStorage/RAM (überlebt iframe-Reload)
+            setNetworkData(persisted);
           } else {
+            // 3. Fallback: aus der kurzen Fritz!Box-eigenen ds/us-Historie aufbauen
             const dsHist: number[] = trafficData.dsHistory || [];
             const usHist: number[] = trafficData.usHistory || [];
             const now = Date.now();
@@ -237,6 +255,7 @@ export default function Dashboard({ sid }: DashboardProps) {
               };
             });
             (window as any).__networkHistory = initial;
+            setApiCache('network-history', initial);
             setNetworkData(initial);
           }
 
@@ -262,6 +281,7 @@ export default function Dashboard({ sid }: DashboardProps) {
               setNetworkData(prev => {
                 const next = [...prev.slice(-(MAX_POINTS - 1)), newPoint];
                 (window as any).__networkHistory = next;
+                setApiCache('network-history', next);
                 return next;
               });
             } catch {}

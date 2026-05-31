@@ -24,7 +24,22 @@ interface AppCache {
 }
 
 const CACHE_TTL = 600000; // 10 minutes
-const APP_VERSION = '1.4.4';
+const APP_VERSION = '1.4.5';
+const LS_CACHE_KEY = 'fritzportal_apicache';
+
+// Beim Start: in-memory-Cache aus localStorage hydratisieren, damit Dashboard-Daten
+// (inkl. Traffic-Chart-Verlauf) einen iframe-Reload des Ingress-Panels überleben und
+// sofort – ohne Loading-Screen – sichtbar sind.
+function hydrateApiCache() {
+  if ((window as any).__apiCache) return;
+  try {
+    const raw = localStorage.getItem(LS_CACHE_KEY);
+    (window as any).__apiCache = raw ? JSON.parse(raw) : {};
+  } catch {
+    (window as any).__apiCache = {};
+  }
+}
+hydrateApiCache();
 
 function getApiCache(key: string): any {
   const cached = (window as any).__apiCache?.[key];
@@ -38,6 +53,8 @@ function setApiCache(key: string, data: any) {
   const cache: AppCache = (window as any).__apiCache || {};
   cache[key] = { data, timestamp: Date.now() };
   (window as any).__apiCache = cache;
+  // Best-effort nach localStorage spiegeln (für Reload-Persistenz)
+  try { localStorage.setItem(LS_CACHE_KEY, JSON.stringify(cache)); } catch {}
 }
 
 export { getApiCache, setApiCache };

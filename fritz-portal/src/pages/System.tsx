@@ -13,7 +13,7 @@ export default function System({ sid }: SystemProps) {
   const [rebooting, setRebooting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [version] = useState('1.4.4');
+  const [version] = useState('1.4.5');
   const [fritzHost, setFritzHost] = useState('fritz.box');
 
   // HA-Sensor-Einstellungen
@@ -25,6 +25,7 @@ export default function System({ sid }: SystemProps) {
     mqtt_available: boolean;
     debug_logging: boolean;
     keep_session_alive: boolean;
+    traffic_history_server: boolean;
   } | null>(null);
   const [haSaving, setHaSaving] = useState(false);
   const [haMessage, setHaMessage] = useState('');
@@ -67,6 +68,7 @@ export default function System({ sid }: SystemProps) {
           ha_sensors_traffic_interval: haSettings.ha_sensors_traffic_interval,
           debug_logging:               haSettings.debug_logging,
           keep_session_alive:          haSettings.keep_session_alive,
+          traffic_history_server:      haSettings.traffic_history_server,
         }),
       });
       const data = await res.json();
@@ -303,6 +305,30 @@ export default function System({ sid }: SystemProps) {
                 <span style={{
                   position: 'absolute', top: 3,
                   left: haSettings.keep_session_alive ? 23 : 3,
+                  width: 20, height: 20, borderRadius: '50%', background: 'white',
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                }} />
+              </button>
+            </div>
+
+            {/* Traffic-Verlauf serverseitig durchgehend sammeln */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderTop: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 14 }}>{t('Traffic-Verlauf serverseitig sammeln')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>{t('Der Server sammelt den Download-/Upload-Verlauf der letzten 30 min durchgehend – auch wenn das Portal nicht geöffnet ist. Das Dashboard-Chart ist beim Zurückkehren sofort lückenlos gefüllt. Kostet etwas mehr FRITZ!Box-Last. (Ohne diese Option wird der Verlauf nur im Browser gespeichert und kann nach längerer Abwesenheit kurz veraltet sein.)')}</div>
+              </div>
+              <button
+                onClick={() => setHaSettings(s => s ? { ...s, traffic_history_server: !s.traffic_history_server } : s)}
+                style={{
+                  width: 46, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+                  background: haSettings.traffic_history_server ? '#22c55e' : '#6b7280',
+                  position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                }}
+                title={haSettings.traffic_history_server ? t('Deaktivieren') : t('Aktivieren')}
+              >
+                <span style={{
+                  position: 'absolute', top: 3,
+                  left: haSettings.traffic_history_server ? 23 : 3,
                   width: 20, height: 20, borderRadius: '50%', background: 'white',
                   transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
                 }} />
