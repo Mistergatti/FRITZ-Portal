@@ -783,6 +783,19 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
   const bandLabels = ['2.4 GHz', '5 GHz', '6 GHz / Gast'];
   const bandColors = ['#3b82f6', '#22c55e', '#f59e0b'];
   const bandBg = ['rgba(59,130,246,0.1)', 'rgba(34,197,94,0.1)', 'rgba(245,158,11,0.1)'];
+
+  // Band-Label: bevorzugt das von der Box gemeldete Frequenzband (_band, Issue #31 –
+  // Tri-Band-Boxen wie die 5690 Pro), sonst Kanal-Heuristik, sonst Index-Annahme.
+  const getBandLabel = (w: any, i: number) => {
+    const band = String(w._band || '');
+    if (band.startsWith('2400')) return '2.4 GHz';
+    if (band.startsWith('5000')) return '5 GHz';
+    if (band.startsWith('6000')) return '6 GHz';
+    const ch = parseInt(w.NewChannel || '', 10);
+    if (ch >= 1 && ch <= 14) return '2.4 GHz';
+    if (ch >= 36) return '5 GHz';
+    return bandLabels[i % bandLabels.length];
+  };
   const headers = { 'X-Fritz-SID': sid };
 
   const [showPass, setShowPass] = useState<Record<number, boolean>>({});
@@ -834,13 +847,6 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
     return standard;
   };
 
-  const getFrequency = (channel: string) => {
-    const ch = parseInt(channel, 10);
-    if (ch >= 1 && ch <= 14) return '2.4 GHz';
-    if (ch >= 36) return '5 GHz';
-    return '-';
-  };
-
   const handleSavePass = async (wlanIndex: number) => {
     const newPass = editPass[wlanIndex];
     if (!newPass || newPass.length < 8) {
@@ -873,12 +879,14 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
     <div>
       {wlanInfo.map((w, i) => {
         const wlanIdx: number = w._index || (i + 1);
-        const isEnabledFromBox = w.NewStatus === 'Up' || w.NewEnable === '1' || w.NewEnable === 1;
+        // Robust: neuere Boxen liefern teils "true"/"UP" in anderer Schreibweise (Issue #31)
+        const isEnabledFromBox = String(w.NewStatus || '').toLowerCase() === 'up'
+          || String(w.NewEnable || '').toLowerCase() === '1'
+          || String(w.NewEnable || '').toLowerCase() === 'true';
         // Optimistisches Override hat Vorrang, bis der nächste Box-Status eintrifft.
         const isEnabled = enableOverride[wlanIdx] !== undefined ? enableOverride[wlanIdx] : isEnabledFromBox;
         const color = bandColors[i % bandColors.length];
         const bg = bandBg[i % bandBg.length];
-        const freq = getFrequency(w.NewChannel || '');
 
         return (
           <div className="card" key={i} style={{ borderLeft: `4px solid ${color}` }}>
@@ -895,7 +903,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
                     <span style={{ fontSize: 20, fontWeight: 700 }}>{w.NewSSID || `WLAN ${i + 1}`}</span>
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    {bandLabels[i % bandLabels.length]} {freq !== '-' ? `\u2013 ${freq}` : ''}
+                    {getBandLabel(w, i)}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -935,7 +943,7 @@ function WLANSettings({ wlanInfo, sid }: { wlanInfo: any[]; sid: string }) {
                 <div style={{ background: bg, borderRadius: 10, padding: 16 }}>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{t('Kanal')}</div>
                   <div style={{ fontSize: 24, fontWeight: 700, color }}>{w.NewChannel || '-'}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{freq}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{getBandLabel(w, i)}</div>
                 </div>
                 <div style={{ background: bg, borderRadius: 10, padding: 16 }}>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{t('Standard')}</div>

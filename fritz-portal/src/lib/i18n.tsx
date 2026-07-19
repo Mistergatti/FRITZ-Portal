@@ -334,6 +334,8 @@ const EN: Record<string, string> = {
   'Intervall: Systemsensoren': 'Interval: system sensors',
   'CPU, RAM, Temperatur, Geräte online, freie IPs, Download, Upload': 'CPU, RAM, temperature, devices online, free IPs, download, upload',
   'Intervall: Traffic-Sensoren': 'Interval: traffic sensors',
+  'Telefonie-Sensoren': 'Telephony sensors',
+  'Letzter Anruf, letzter verpasster und letzter eingehender Anruf (mit Nummer & Name) an Home Assistant übertragen – nur sinnvoll, wenn Telefonie über die FRITZ!Box genutzt wird.': 'Send last call, last missed call and last incoming call (with number & name) to Home Assistant – only useful if telephony runs through the FRITZ!Box.',
   'Heute, Gestern, Aktuelle Woche, Aktueller Monat, Vormonat (Download & Upload)': 'Today, yesterday, current week, current month, previous month (download & upload)',
   'Alle API-Anfragen (data.lua, SOAP) im Add-on-Protokoll ausgeben – hilfreich zur Fehlerdiagnose': 'Log all API requests (data.lua, SOAP) in the add-on log – helpful for diagnostics',
   'Sek.': 's',

@@ -4,7 +4,7 @@ import mqtt from 'mqtt';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { createHash } from 'crypto';
+import { createHash, pbkdf2Sync } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -70,6 +70,7 @@ try {
     if (opts.ha_sensors                  !== undefined && !process.env.HA_SENSORS)                  process.env.HA_SENSORS                  = String(opts.ha_sensors);
     if (opts.ha_sensors_interval          !== undefined && !process.env.HA_SENSORS_INTERVAL)          process.env.HA_SENSORS_INTERVAL          = String(opts.ha_sensors_interval);
     if (opts.ha_sensors_traffic_interval  !== undefined && !process.env.HA_SENSORS_TRAFFIC_INTERVAL)  process.env.HA_SENSORS_TRAFFIC_INTERVAL  = String(opts.ha_sensors_traffic_interval);
+    if (opts.ha_phone_sensors             !== undefined && !process.env.HA_PHONE_SENSORS)              process.env.HA_PHONE_SENSORS             = String(opts.ha_phone_sensors);
     if (opts.keep_session_alive           !== undefined && !process.env.KEEP_SESSION_ALIVE)            process.env.KEEP_SESSION_ALIVE           = String(opts.keep_session_alive);
     if (opts.traffic_history_server       !== undefined && !process.env.TRAFFIC_HISTORY_SERVER)        process.env.TRAFFIC_HISTORY_SERVER       = String(opts.traffic_history_server);
     if (opts.debug_logging !== undefined) debugLogging = !!opts.debug_logging;
@@ -431,6 +432,11 @@ async function discoverControlUrls(host) {
     'urn:dslforum-org:service:WLANConfiguration:1': '/upnp/control/wlanconfig',
     'urn:dslforum-org:service:WLANConfiguration:2': '/upnp/control/wlanconfig2',
     'urn:dslforum-org:service:WLANConfiguration:3': '/upnp/control/wlanconfig3',
+    // Tri-Band-Boxen (z. B. 5690 Pro: 2.4 + 5 + 6 GHz + Gast) haben eine 4. Konfiguration
+    'urn:dslforum-org:service:WLANConfiguration:4': '/upnp/control/wlanconfig4',
+    // IGD-Variante der WAN-Dienste – funktioniert ohne TR-064-Authentifizierung und
+    // dient als letzter Fallback wenn die dslforum-Dienste scheitern (Issue #33)
+    'urn:schemas-upnp-org:service:WANIPConnection:1': '/igdupnp/control/WANIPConn1',
   };
   for (const [svc, url] of Object.entries(fallbacks)) {
     if (!controlUrls[svc]) controlUrls[svc] = url;
@@ -441,7 +447,10 @@ async function discoverControlUrls(host) {
 async function getWebSid(host, username, password) {
   const loginUrl = `http://${host}/login_sid.lua`;
   try {
-    const resp = await fetch(loginUrl);
+    // Issue #31/#33: `?version=2` anfragen – neuere Boxen (FRITZ!OS 7.24+, Pflicht auf
+    // 5690 Pro / 7690 mit FRITZ!OS 8.x) liefern dann eine PBKDF2-Challenge („2$…").
+    // Ältere Boxen ignorieren den Parameter und antworten mit der MD5-Challenge.
+    const resp = await fetch(`${loginUrl}?version=2`);
     const text = await resp.text();
 
     // XML-Antwort (klassische FritzBox)
@@ -451,9 +460,20 @@ async function getWebSid(host, username, password) {
       const challengeMatch = text.match(/<Challenge>([^<]+)<\/Challenge>/);
       if (!challengeMatch) return '';
       const challenge = challengeMatch[1];
-      const challengeBuf = Buffer.from(challenge + '-' + password, 'utf16le');
-      const responseStr = createHash('md5').update(challengeBuf).digest('hex');
-      const formData = new URLSearchParams({ username, response: challenge + '-' + responseStr });
+      let formData;
+      if (challenge.startsWith('2$')) {
+        // PBKDF2-Verfahren (AVM „Session-ID" Version 2):
+        // Challenge = 2$<iter1>$<salt1hex>$<iter2>$<salt2hex>
+        const [, iter1, salt1, iter2, salt2] = challenge.split('$');
+        const hash1 = pbkdf2Sync(Buffer.from(password, 'utf8'), Buffer.from(salt1, 'hex'), parseInt(iter1, 10), 32, 'sha256');
+        const hash2 = pbkdf2Sync(hash1, Buffer.from(salt2, 'hex'), parseInt(iter2, 10), 32, 'sha256');
+        formData = new URLSearchParams({ username, response: `${salt2}$${hash2.toString('hex')}` });
+      } else {
+        // Klassisches MD5-Challenge-Response-Verfahren
+        const challengeBuf = Buffer.from(challenge + '-' + password, 'utf16le');
+        const responseStr = createHash('md5').update(challengeBuf).digest('hex');
+        formData = new URLSearchParams({ username, response: challenge + '-' + responseStr });
+      }
       const loginResp = await fetch(loginUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData.toString() });
       const loginText = await loginResp.text();
       const newSid = loginText.match(/<SID>([^<]+)<\/SID>/);
@@ -497,11 +517,16 @@ async function getWebSid(host, username, password) {
 // SmartHome-Geräteliste deduplizieren. AVM exportiert manche Geräte (z. B. RolloTron
 // DECT) als zwei Einträge mit gleicher AIN: Hauptgerät plus virtuelles Sub-Device für
 // einzelne Funktionen. Ohne Dedup erscheint der Rolladen doppelt im Frontend.
+// Issue #32: Sub-Units tragen die Basis-AIN mit Suffix („13077 0069166-1") – z. B.
+// FRITZ!Smart Energy 250. Für den Dedup-Key wird das Unit-Suffix entfernt, damit
+// Hauptgerät + Sub-Unit zu einem Eintrag verschmelzen (so zeigt es auch die Fritz-UI).
 function dedupSmartHomeDevices(devices) {
   if (!Array.isArray(devices) || devices.length === 0) return devices;
   const byKey = new Map();
   for (const d of devices) {
-    const key = String(d.identifier || d.ain || d.id || d.name || '').replace(/\s+/g, '').toLowerCase();
+    const rawId = String(d.identifier || d.ain || d.id || '').trim();
+    const baseId = rawId.replace(/-\d+$/, ''); // Unit-Suffix „-1" abschneiden
+    const key = (baseId || String(d.name || '')).replace(/\s+/g, '').toLowerCase();
     if (!key) continue;
     const existing = byKey.get(key);
     if (!existing) { byKey.set(key, d); continue; }
@@ -514,6 +539,8 @@ function dedupSmartHomeDevices(devices) {
     const existingMask = parseInt(existing.functionbitmask || '0', 10) || 0;
     const newMask      = parseInt(d.functionbitmask        || '0', 10) || 0;
     merged.functionbitmask = Math.max(existingMask, newMask);
+    // Generischen HAN-FUN-Basisnamen durch den echten Unit-Namen ersetzen
+    if (d.name && (!merged.name || /^han-?fun/i.test(String(merged.name).trim()))) merged.name = d.name;
     byKey.set(key, merged);
   }
   return Array.from(byKey.values());
@@ -1401,8 +1428,10 @@ app.get('/api/fritz/network/wan', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   const session = sessions.get(sid);
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
-  // WANIPConnection:1 (DHCP/Kabel-Modelle); Fallback: WANPPPConnection:1 (DSL/PPPoE wie 7530)
-  for (const svc of ['urn:dslforum-org:service:WANIPConnection:1', 'urn:dslforum-org:service:WANPPPConnection:1']) {
+  // WANIPConnection:1 (DHCP/Kabel-Modelle); Fallback: WANPPPConnection:1 (DSL/PPPoE wie 7530);
+  // letzter Versuch: IGD-Variante (ohne TR-064-Auth) – hilft auf Boxen, deren
+  // dslforum-WAN-Dienste nicht antworten (Issue #33: 7690/5690 Pro)
+  for (const svc of ['urn:dslforum-org:service:WANIPConnection:1', 'urn:dslforum-org:service:WANPPPConnection:1', 'urn:schemas-upnp-org:service:WANIPConnection:1']) {
     try {
       const [ip, status] = await Promise.all([
         soapRequest(session.host, svc, 'GetExternalIPAddress', session.username, session.password, session.controlUrls),
@@ -1448,26 +1477,53 @@ function decodeXmlEntities(s) {
     .replace(/&([a-zA-Z]+);/g, (m, n) => (named[n] !== undefined ? named[n] : m));
 }
 
+// Vorhandene WLANConfiguration-Indizes ermitteln: aus den per tr64desc.xml entdeckten
+// Services (Tri-Band-Boxen wie die 5690 Pro haben 4: 2.4/5/6 GHz + Gast), mindestens 1–4.
+// Issue #31: mit fest 1–4 fehlte auf Tri-Band-Boxen kein Index, aber die Discovery kann
+// auch mehr liefern – daher dynamisch.
+function wlanServiceIndices(session) {
+  const indices = new Set([1, 2, 3, 4]);
+  for (const svc of Object.keys(session.controlUrls || {})) {
+    const m = svc.match(/^urn:dslforum-org:service:WLANConfiguration:(\d+)$/);
+    if (m) indices.add(parseInt(m[1], 10));
+  }
+  return [...indices].sort((a, b) => a - b);
+}
+
+// WLAN-Aktiv-Status robust auslesen – neuere Boxen liefern teils "true"/"Up" in
+// anderer Schreibweise (Issue #31: WLAN als „Inaktiv" angezeigt obwohl eingeschaltet)
+function wlanEnabled(info) {
+  const status = String(info?.NewStatus || '').toLowerCase();
+  const enable = String(info?.NewEnable || '').toLowerCase();
+  return status === 'up' || enable === '1' || enable === 'true';
+}
+
 app.get('/api/fritz/network/wlan', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   const session = sessions.get(sid);
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
   try {
     const results = [];
-    for (let i = 1; i <= 4; i++) {
+    for (const i of wlanServiceIndices(session)) {
       try {
         const svc = `urn:dslforum-org:service:WLANConfiguration:${i}`;
         const info = await soapRequest(session.host, svc, 'GetInfo', session.username, session.password, session.controlUrls);
+        if (!info || typeof info !== 'object' || info.NewSSID === undefined) continue;
         let keyPassphrase = '';
         try {
           const keys = await soapRequest(session.host, svc, 'GetSecurityKeys', session.username, session.password, session.controlUrls);
           keyPassphrase = keys.NewKeyPassphrase || '';
         } catch {}
-        if (info && typeof info === 'object') {
-          if (info.NewSSID) info.NewSSID = decodeXmlEntities(info.NewSSID);
-          if (info.NewSecure) info.NewSecure = decodeXmlEntities(info.NewSecure);
-        }
-        results.push({ ...info, NewKeyPassphrase: decodeXmlEntities(keyPassphrase), _index: i });
+        // Frequenzband direkt von der Box erfragen (2400/5000/6000) – zuverlässiger als
+        // die Kanal-Heuristik und einzige Möglichkeit, 6-GHz-WLANs zu erkennen (Issue #31)
+        let band = '';
+        try {
+          const ext = await soapRequest(session.host, svc, 'X_AVM-DE_GetWLANExtInfo', session.username, session.password, session.controlUrls);
+          band = ext?.['NewX_AVM-DE_FrequencyBand'] || '';
+        } catch {}
+        if (info.NewSSID) info.NewSSID = decodeXmlEntities(info.NewSSID);
+        if (info.NewSecure) info.NewSecure = decodeXmlEntities(info.NewSecure);
+        results.push({ ...info, NewKeyPassphrase: decodeXmlEntities(keyPassphrase), _index: i, _band: band });
       } catch {}
     }
     return res.json(results);
@@ -1495,14 +1551,13 @@ async function getWlanStates(session) {
   const cached = getCached('network-wlan', 30000);
   if (cached) return cached;
   const states = [];
-  for (let i = 1; i <= 4; i++) {
+  for (const i of wlanServiceIndices(session)) {
     try {
       const svc = `urn:dslforum-org:service:WLANConfiguration:${i}`;
       const info = await soapRequest(session.host, svc, 'GetInfo', session.username, session.password, session.controlUrls);
       if (!info || typeof info !== 'object' || info.NewSSID === undefined) continue;
       const ssid = decodeXmlEntities(info.NewSSID || '');
-      const enabled = info.NewStatus === 'Up' || info.NewEnable === '1' || info.NewEnable === 1;
-      states.push({ index: i, ssid, enabled, label: ssid || `WLAN ${i}` });
+      states.push({ index: i, ssid, enabled: wlanEnabled(info), label: ssid || `WLAN ${i}` });
     } catch {}
   }
   if (states.length) setCached('network-wlan', states);
@@ -2254,50 +2309,54 @@ app.get('/api/fritz/dect', async (req, res) => {
   }
 });
 
+// Anrufliste holen – wird vom REST-Endpoint und vom HA-Telefonie-Sensor-Push genutzt.
+// 60s Cache – Anrufliste muss nicht sekundengenau sein und der XML-Download
+// war auf einigen Fritz!Boxen >5s.
+async function fetchCallList(session) {
+  const cached = getCached('calls', 60000);
+  if (cached) return cached;
+  let result = await soapRequest(session.host, 'urn:dslforum-org:service:X_AVM-DE_OnTel:1', 'GetCallList', session.username, session.password, session.controlUrls);
+  if (!result?.NewCallListURL && !result?.['NewX_AVM-DE_CallListURL']) {
+    result = await soapRequest(session.host, 'urn:dslforum-org:service:X_AVM-DE_VoIP:1', 'X_AVM-DE_GetCallList', session.username, session.password, session.controlUrls);
+  }
+  const callListUrl = result?.NewCallListURL || result?.['NewX_AVM-DE_CallListURL'];
+  if (!callListUrl) return null;
+  const callRes = await fetch(callListUrl);
+  const xml = await callRes.text();
+  const calls = [];
+  const regex = /<Call>([\s\S]*?)<\/Call>/g;
+  let match;
+  while ((match = regex.exec(xml)) !== null) {
+    const x = match[1];
+    const type = x.match(/<Type>([^<]*)<\/Type>/)?.[1] || '';
+    const date = x.match(/<Date>([^<]*)<\/Date>/)?.[1] || '';
+    // Issue #28: AVM kodiert Sonderzeichen in <Name>/<Device> als XML-Entities
+    // (`&amp;` für `&`, `&auml;`/`&#252;` für Umlaute …). Ohne Decode landen die
+    // 1:1 im Frontend – darum decodeXmlEntities auf alle Text-Felder.
+    const name = decodeXmlEntities(x.match(/<Name>([^<]*)<\/Name>/)?.[1] || '');
+    const duration = x.match(/<Duration>([^<]*)<\/Duration>/)?.[1] || '';
+    const caller = decodeXmlEntities(x.match(/<Caller>([^<]*)<\/Caller>/)?.[1] || '');
+    const called = decodeXmlEntities(x.match(/<Called>([^<]*)<\/Called>/)?.[1] || '');
+    const device = decodeXmlEntities(x.match(/<Device>([^<]*)<\/Device>/)?.[1] || '');
+    // Fritz-XML-Semantik: Caller = wer angerufen hat, Called = wer angerufen wurde.
+    // Das passt 1:1 auf from/to – egal ob eingehend oder ausgehend.
+    // Eingehend (1), Verpasst (2), Aktiv eingehend (9), Abgewiesen (10) → Gegenstelle = Caller.
+    const isIncoming = type === '1' || type === '2' || type === '9' || type === '10';
+    // number (Altfeld) zeigt weiterhin die Gegenstelle – für Rückwärtskompatibilität
+    const number = isIncoming ? caller : called;
+    calls.push({ date, name, number, from: caller, to: called, device, type, duration });
+  }
+  setCached('calls', calls);
+  return calls;
+}
+
 app.get('/api/fritz/calls', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   const session = sessions.get(sid);
   if (!session) return res.status(401).json({ error: 'Nicht eingeloggt' });
-  // 60s Cache – Anrufliste muss nicht sekundengenau sein und der XML-Download
-  // war auf einigen Fritz!Boxen >5s.
-  const cached = getCached('calls', 60000);
-  if (cached) return res.json(cached);
   try {
-    let result = await soapRequest(session.host, 'urn:dslforum-org:service:X_AVM-DE_OnTel:1', 'GetCallList', session.username, session.password, session.controlUrls);
-    if (!result?.NewCallListURL && !result?.['NewX_AVM-DE_CallListURL']) {
-      result = await soapRequest(session.host, 'urn:dslforum-org:service:X_AVM-DE_VoIP:1', 'X_AVM-DE_GetCallList', session.username, session.password, session.controlUrls);
-    }
-    const callListUrl = result?.NewCallListURL || result?.['NewX_AVM-DE_CallListURL'];
-    if (callListUrl) {
-      const callRes = await fetch(callListUrl);
-      const xml = await callRes.text();
-      const calls = [];
-      const regex = /<Call>([\s\S]*?)<\/Call>/g;
-      let match;
-      while ((match = regex.exec(xml)) !== null) {
-        const x = match[1];
-        const type = x.match(/<Type>([^<]*)<\/Type>/)?.[1] || '';
-        const date = x.match(/<Date>([^<]*)<\/Date>/)?.[1] || '';
-        // Issue #28: AVM kodiert Sonderzeichen in <Name>/<Device> als XML-Entities
-        // (`&amp;` für `&`, `&auml;`/`&#252;` für Umlaute …). Ohne Decode landen die
-        // 1:1 im Frontend – darum decodeXmlEntities auf alle Text-Felder.
-        const name = decodeXmlEntities(x.match(/<Name>([^<]*)<\/Name>/)?.[1] || '');
-        const duration = x.match(/<Duration>([^<]*)<\/Duration>/)?.[1] || '';
-        const caller = decodeXmlEntities(x.match(/<Caller>([^<]*)<\/Caller>/)?.[1] || '');
-        const called = decodeXmlEntities(x.match(/<Called>([^<]*)<\/Called>/)?.[1] || '');
-        const device = decodeXmlEntities(x.match(/<Device>([^<]*)<\/Device>/)?.[1] || '');
-        // Fritz-XML-Semantik: Caller = wer angerufen hat, Called = wer angerufen wurde.
-        // Das passt 1:1 auf from/to – egal ob eingehend oder ausgehend.
-        // Eingehend (1), Verpasst (2), Aktiv eingehend (9), Abgewiesen (10) → Gegenstelle = Caller.
-        const isIncoming = type === '1' || type === '2' || type === '9' || type === '10';
-        // number (Altfeld) zeigt weiterhin die Gegenstelle – für Rückwärtskompatibilität
-        const number = isIncoming ? caller : called;
-        calls.push({ date, name, number, from: caller, to: called, device, type, duration });
-      }
-      setCached('calls', calls);
-      return res.json(calls);
-    }
-    return res.json([]);
+    const calls = await fetchCallList(session);
+    return res.json(calls || []);
   } catch (err) {
     console.error('Calls error:', err.message);
     return res.json([]);
@@ -2479,6 +2538,9 @@ const SETTINGS_FILE = '/data/fritz-portal.json';
 let haSensorsEnabled     = process.env.HA_SENSORS === 'true';
 let haFastIntervalSec    = Math.max(10,  parseInt(process.env.HA_SENSORS_INTERVAL          || '60',  10));
 let haTrafficIntervalSec = Math.max(30,  parseInt(process.env.HA_SENSORS_TRAFFIC_INTERVAL  || '300', 10));
+// Telefonie-Sensoren (letzter Anruf / verpasst / eingehend) – Opt-in, weil nicht
+// jeder Telefonie über die FRITZ!Box nutzt und der Anruflisten-Download die Box belastet.
+let haPhoneSensorsEnabled = process.env.HA_PHONE_SENSORS === 'true';
 // Default: aus. Wer dauerhafte HA-Sensor-Updates braucht, muss die Option in der
 // System-Page (oder per Add-on-Config) explizit aktivieren.
 let keepSessionAlive     = process.env.KEEP_SESSION_ALIVE === 'true';
@@ -2493,6 +2555,7 @@ try {
     if (s.ha_sensors !== undefined)             haSensorsEnabled     = !!s.ha_sensors;
     if (s.ha_sensors_interval)                  haFastIntervalSec    = Math.max(10,  parseInt(s.ha_sensors_interval,        10));
     if (s.ha_sensors_traffic_interval)          haTrafficIntervalSec = Math.max(30,  parseInt(s.ha_sensors_traffic_interval, 10));
+    if (s.ha_phone_sensors !== undefined)       haPhoneSensorsEnabled = !!s.ha_phone_sensors;
     if (s.keep_session_alive !== undefined)     keepSessionAlive     = !!s.keep_session_alive;
     if (s.traffic_history_server !== undefined) trafficHistoryServer = !!s.traffic_history_server;
   }
@@ -2539,6 +2602,15 @@ const MQTT_SENSORS = [
   { id: 'upload_speed',   name: 'Upload aktuell',     unit: 'MB/s',icon: 'mdi:upload',         device_class: 'data_rate',   state_class: 'measurement' },
 ];
 
+// Telefonie-Sensoren: Zustand = Name (oder Nummer) der Gegenstelle, Details
+// (Nummer, Name, Datum, Dauer, eigenes Gerät) als Attribute. Damit kann sich der
+// User in HA eine eigene Anruf-Card bauen.
+const MQTT_PHONE_SENSORS = [
+  { id: 'last_call',          name: 'Letzter Anruf',             icon: 'mdi:phone-log' },
+  { id: 'last_missed_call',   name: 'Letzter verpasster Anruf',  icon: 'mdi:phone-missed' },
+  { id: 'last_incoming_call', name: 'Letzter eingehender Anruf', icon: 'mdi:phone-incoming' },
+];
+
 const MQTT_TRAFFIC_SENSORS = [
   { suffix: 'today',      name: 'Heute' },
   { suffix: 'yesterday',  name: 'Gestern' },
@@ -2583,7 +2655,20 @@ async function publishMqttDiscovery() {
       if (await publishMqtt(`homeassistant/sensor/fritzportal_${id}/config`, config, true)) registered++;
     }
   }
-  const total = MQTT_SENSORS.length + MQTT_TRAFFIC_SENSORS.length * 2;
+  // Telefonie-Sensoren nur registrieren wenn die Option aktiv ist (Opt-in)
+  if (haPhoneSensorsEnabled) {
+    for (const s of MQTT_PHONE_SENSORS) {
+      const config = {
+        name: s.name, unique_id: `fritzportal_${s.id}`, object_id: `fritzportal_${s.id}`,
+        state_topic: `fritzportal/${s.id}/state`,
+        json_attributes_topic: `fritzportal/${s.id}/attributes`,
+        icon: s.icon,
+        device,
+      };
+      if (await publishMqtt(`homeassistant/sensor/fritzportal_${s.id}/config`, config, true)) registered++;
+    }
+  }
+  const total = MQTT_SENSORS.length + MQTT_TRAFFIC_SENSORS.length * 2 + (haPhoneSensorsEnabled ? MQTT_PHONE_SENSORS.length : 0);
   console.log(`MQTT Discovery: ${registered}/${total} Sensoren registriert`);
 }
 
@@ -2623,6 +2708,9 @@ async function removeMqttDiscovery() {
     for (const dir of ['received', 'sent']) {
       await publishMqtt(`homeassistant/sensor/fritzportal_traffic_${t.suffix}_${dir}/config`, '', true);
     }
+  }
+  for (const s of MQTT_PHONE_SENSORS) {
+    await publishMqtt(`homeassistant/sensor/fritzportal_${s.id}/config`, '', true);
   }
   for (const idx of wlanDiscoveredIdx) {
     await publishMqtt(`homeassistant/switch/fritzportal_wlan_${idx}/config`, '', true);
@@ -2787,6 +2875,70 @@ async function pushFastSensorsToHA() {
   }
 }
 
+// ── Telefonie-Sensoren: letzter Anruf / letzter verpasster / letzter eingehender ──
+// Zustand = Name der Gegenstelle (Fallback: Nummer), Details als Attribute.
+// Anruf-Typen (AVM): 1 = eingehend angenommen, 2 = verpasst, 3 = ausgehend,
+// 9 = eingehend aktiv, 10 = abgewiesen, 11 = ausgehend aktiv.
+const CALL_TYPE_LABELS = {
+  '1': 'incoming', '2': 'missed', '3': 'outgoing',
+  '9': 'incoming_active', '10': 'rejected', '11': 'outgoing_active',
+};
+
+function callToSensorPayload(call) {
+  if (!call) return { state: '-', attributes: {} };
+  const state = call.name || call.number || 'Unbekannt';
+  return {
+    state,
+    attributes: {
+      number:    call.number || '',
+      name:      call.name || '',
+      date:      call.date || '',
+      duration:  call.duration || '',
+      type:      CALL_TYPE_LABELS[call.type] || call.type || '',
+      device:    call.device || '',
+      from:      call.from || '',
+      to:        call.to || '',
+    },
+  };
+}
+
+async function pushPhoneSensorsToHA() {
+  if (!HA_TOKEN || !haPhoneSensorsEnabled) return;
+  const session = [...sessions.values()][0];
+  if (!session) return;
+  let calls;
+  try { calls = await fetchCallList(session); } catch { return; }
+  if (!Array.isArray(calls) || calls.length === 0) return;
+
+  // Liste ist absteigend nach Datum sortiert (neuester Eintrag zuerst)
+  const lastCall     = calls[0];
+  const lastMissed   = calls.find(c => c.type === '2');
+  const lastIncoming = calls.find(c => c.type === '1' || c.type === '9');
+
+  const sensors = [
+    { id: 'last_call',          call: lastCall,     friendly: 'FRITZ!Portal Letzter Anruf',             icon: 'mdi:phone-log' },
+    { id: 'last_missed_call',   call: lastMissed,   friendly: 'FRITZ!Portal Letzter verpasster Anruf',  icon: 'mdi:phone-missed' },
+    { id: 'last_incoming_call', call: lastIncoming, friendly: 'FRITZ!Portal Letzter eingehender Anruf', icon: 'mdi:phone-incoming' },
+  ];
+
+  for (const s of sensors) {
+    const { state, attributes } = callToSensorPayload(s.call);
+    // MQTT: immer wenn Broker erreichbar
+    if (mqttAvailable) {
+      await publishMqtt(`fritzportal/${s.id}/state`, state);
+      await publishMqtt(`fritzportal/${s.id}/attributes`, attributes, true);
+    }
+    // REST-API Fallback: zusätzlich wenn aktiviert
+    if (haSensorsEnabled) {
+      await setState(`sensor.fritzportal_${s.id}`, state, {
+        friendly_name: s.friendly, icon: s.icon,
+        unique_id: `fritzportal_rest_${s.id}`,
+        ...attributes,
+      });
+    }
+  }
+}
+
 async function pushTrafficSensorsToHA() {
   if (!HA_TOKEN) return;
   // Cache mit großzügigem TTL lesen (doppeltes Intervall als Puffer)
@@ -2855,7 +3007,9 @@ function startHaTimers() {
   connectMqttBroker().catch(() => {});
   const restInfo = haSensorsEnabled ? ' + REST-API Fallback aktiv' : '';
   console.log(`HA Sensor Push gestartet: MQTT Discovery${restInfo} (Systemsensoren: ${haFastIntervalSec}s, Traffic: ${haTrafficIntervalSec}s)`);
-  haFastTimer    = setInterval(() => { pushFastSensorsToHA().catch(() => {}); },    haFastIntervalSec    * 1000);
+  // Telefonie-Sensoren laufen im Fast-Intervall mit – fetchCallList cached 60s,
+  // die FRITZ!Box wird also höchstens einmal pro Minute nach der Anrufliste gefragt.
+  haFastTimer    = setInterval(() => { pushFastSensorsToHA().catch(() => {}); pushPhoneSensorsToHA().catch(() => {}); }, haFastIntervalSec * 1000);
   haTrafficTimer = setInterval(() => { pushTrafficSensorsToHA().catch(() => {}); }, haTrafficIntervalSec * 1000);
 }
 
@@ -2899,6 +3053,7 @@ app.get('/api/fritz/ha-settings', (req, res) => {
     ha_sensors:                  haSensorsEnabled,
     ha_sensors_interval:         haFastIntervalSec,
     ha_sensors_traffic_interval: haTrafficIntervalSec,
+    ha_phone_sensors:            haPhoneSensorsEnabled,
     ha_available:                !!HA_TOKEN,
     mqtt_available:              mqttAvailable,
     debug_logging:               debugLogging,
@@ -2910,8 +3065,24 @@ app.get('/api/fritz/ha-settings', (req, res) => {
 app.post('/api/fritz/ha-settings', async (req, res) => {
   const sid = req.headers['x-fritz-sid'];
   if (!sessions.get(sid)) return res.status(401).json({ error: 'Nicht eingeloggt' });
-  const { ha_sensors, ha_sensors_interval, ha_sensors_traffic_interval, debug_logging, keep_session_alive, traffic_history_server } = req.body;
+  const { ha_sensors, ha_sensors_interval, ha_sensors_traffic_interval, ha_phone_sensors, debug_logging, keep_session_alive, traffic_history_server } = req.body;
   if (ha_sensors !== undefined)                  haSensorsEnabled     = !!ha_sensors;
+  if (ha_phone_sensors !== undefined) {
+    const wasOn = haPhoneSensorsEnabled;
+    haPhoneSensorsEnabled = !!ha_phone_sensors;
+    if (wasOn !== haPhoneSensorsEnabled) {
+      console.log(`Telefonie-Sensoren ${haPhoneSensorsEnabled ? 'aktiviert' : 'deaktiviert'}`);
+      // Beim Deaktivieren die Discovery-Configs entfernen, damit die Entitäten
+      // nicht als verwaiste Sensoren in HA stehen bleiben
+      if (wasOn && !haPhoneSensorsEnabled && mqttAvailable) {
+        for (const s of MQTT_PHONE_SENSORS) {
+          publishMqtt(`homeassistant/sensor/fritzportal_${s.id}/config`, '', true).catch(() => {});
+        }
+      }
+      // Beim Aktivieren sofort einmal pushen, damit der User nicht aufs Intervall warten muss
+      if (!wasOn && haPhoneSensorsEnabled) setTimeout(() => { pushPhoneSensorsToHA().catch(() => {}); }, 2000);
+    }
+  }
   if (ha_sensors_interval !== undefined)         haFastIntervalSec    = Math.max(10,  parseInt(ha_sensors_interval,         10) || 60);
   if (ha_sensors_traffic_interval !== undefined) haTrafficIntervalSec = Math.max(30,  parseInt(ha_sensors_traffic_interval, 10) || 300);
   if (debug_logging !== undefined)               { debugLogging = !!debug_logging; console.log(`Debug-Logging ${debugLogging ? 'aktiviert' : 'deaktiviert'}`); }
@@ -2929,6 +3100,7 @@ app.post('/api/fritz/ha-settings', async (req, res) => {
       ha_sensors:                  haSensorsEnabled,
       ha_sensors_interval:         haFastIntervalSec,
       ha_sensors_traffic_interval: haTrafficIntervalSec,
+      ha_phone_sensors:            haPhoneSensorsEnabled,
       debug_logging:               debugLogging,
       keep_session_alive:          keepSessionAlive,
       traffic_history_server:      trafficHistoryServer,
@@ -2945,12 +3117,12 @@ app.post('/api/fritz/ha-settings', async (req, res) => {
       await fetch('http://supervisor/addons/self/options', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ options: { ...opts, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, debug_logging: debugLogging, keep_session_alive: keepSessionAlive, traffic_history_server: trafficHistoryServer } }),
+        body: JSON.stringify({ options: { ...opts, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, ha_phone_sensors: haPhoneSensorsEnabled, debug_logging: debugLogging, keep_session_alive: keepSessionAlive, traffic_history_server: trafficHistoryServer } }),
       });
     }
   } catch {}
   startHaTimers();
-  return res.json({ success: true, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, keep_session_alive: keepSessionAlive, traffic_history_server: trafficHistoryServer });
+  return res.json({ success: true, ha_sensors: haSensorsEnabled, ha_sensors_interval: haFastIntervalSec, ha_sensors_traffic_interval: haTrafficIntervalSec, ha_phone_sensors: haPhoneSensorsEnabled, keep_session_alive: keepSessionAlive, traffic_history_server: trafficHistoryServer });
 });
 
 const PORT = 3003;

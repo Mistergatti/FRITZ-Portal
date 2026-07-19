@@ -9,7 +9,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=home-assistant&logoColor=white" alt="HA App"/>
-  <img src="https://img.shields.io/badge/Version-1.4.5-blue" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.4.6-blue" alt="Version"/>
   <img src="https://img.shields.io/badge/Architecture-amd64%20%7C%20aarch64%20%7C%20armhf-green" alt="Arch"/>
   <img src="https://img.shields.io/badge/License-MIT-lightgrey" alt="License"/>
   <img src="https://img.shields.io/badge/Downloads-14.3K-blue" alt="Downloads"/>
@@ -85,6 +85,7 @@ If you like the App, I would appreciate a Star rating ⭐ from you. 🤗
 | `ha_sensors` | Enable REST API fallback (only needed without MQTT broker) | `false` |
 | `ha_sensors_interval` | System sensor interval (seconds) | `60` |
 | `ha_sensors_traffic_interval` | Traffic sensor interval (seconds) | `300` |
+| `ha_phone_sensors` | Enable telephony sensors: last call, last missed call and last incoming call (with number & name) as HA sensors – only useful if telephony runs through the FRITZ!Box | `false` |
 | `keep_session_alive` | Keep the FRITZ!Box session permanently open – required for continuous HA sensor updates even when the portal is not actively opened. **Increases load on the FRITZ!Box and can compete with HA's built-in Fritz!SmartHome integration** – only enable when the sensors really must be updated 24/7. **Also required to switch WLAN from HA while the portal is not open.** | `false` |
 | `traffic_history_server` | Continuously collect the download/upload history (last 30 min) on the server so the dashboard chart is fully filled immediately when you return – regardless of whether the portal was open. Costs slightly more FRITZ!Box load. Without this option the history is stored in the browser (localStorage) only. | `false` |
 | `debug_logging` | Log all API requests (TR-064, data.lua) to the protocol – useful for troubleshooting, otherwise leave off | `false` |
@@ -192,6 +193,38 @@ state appears as a read-only sensor `sensor.fritzportal_wlan_<N>` (no switching 
 > **Prerequisite:** switching requires an active FRITZ!Box session. When the portal is **not** currently
 > open in a browser, the switch command is only executed if `keep_session_alive: true` is set. The
 > FRITZ!Box user also needs write access to **„FRITZ!Box settings"**.
+
+### Telephony sensors: recent calls in Home Assistant (v1.4.6+)
+
+With the **"Telephony sensors"** option (System page or `ha_phone_sensors: true`) FRITZ!Portal pushes
+three sensors to Home Assistant – via MQTT Discovery and/or the REST API fallback:
+
+| Sensor | Content |
+|---|---|
+| `sensor.fritzportal_last_call` | Last call (incoming or outgoing) |
+| `sensor.fritzportal_last_missed_call` | Last missed call |
+| `sensor.fritzportal_last_incoming_call` | Last accepted incoming call |
+
+The **sensor value** is the name of the remote party (from the FRITZ!Box phone book, fallback: phone
+number). Details are available as **attributes**: `number`, `name`, `date`, `duration`, `type`, `device`,
+`from`, `to`. Example of a small call card:
+
+```yaml
+type: markdown
+title: Phone
+content: >
+  📞 **Last call:** {{ states('sensor.fritzportal_last_call') }}
+  ({{ state_attr('sensor.fritzportal_last_call','number') }})
+  – {{ state_attr('sensor.fritzportal_last_call','date') }}
+
+  📵 **Missed:** {{ states('sensor.fritzportal_last_missed_call') }}
+  ({{ state_attr('sensor.fritzportal_last_missed_call','number') }})
+  – {{ state_attr('sensor.fritzportal_last_missed_call','date') }}
+```
+
+> The sensors are **disabled by default** since not everyone runs telephony through the FRITZ!Box.
+> When disabled, the MQTT entities are automatically removed from HA again. The FRITZ!Box user needs the
+> **"Voice messages, fax messages, FRITZ!App Fon and call list"** permission.
 
 ---
 

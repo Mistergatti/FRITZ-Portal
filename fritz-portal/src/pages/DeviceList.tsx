@@ -194,13 +194,18 @@ export default function DeviceList({ sid, onSelectDevice }: DeviceListProps) {
   };
 
   const sorted = [...filtered].sort((a, b) => {
+    // Offline-Geräte immer ans Ende: erst alle Online-Geräte (sortiert),
+    // darunter die Offline-Geräte (ebenfalls sortiert)
+    const grp = (b.active ? 1 : 0) - (a.active ? 1 : 0);
+    if (grp !== 0) return grp;
     let cmp = 0;
     switch (sortField) {
       case 'name':
         cmp = (a.name || 'Unbekannt').localeCompare(b.name || 'Unbekannt');
         break;
       case 'status':
-        cmp = (a.active ? 1 : 0) - (b.active ? 1 : 0);
+        // Innerhalb der Gruppe (online/offline) nach Name sortieren
+        cmp = (a.name || 'Unbekannt').localeCompare(b.name || 'Unbekannt');
         break;
       case 'ip': {
         const ipNum = (ip: string) =>

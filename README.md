@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=home-assistant&logoColor=white" alt="HA App"/>
-  <img src="https://img.shields.io/badge/Version-1.4.5-blue" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.4.6-blue" alt="Version"/>
   <img src="https://img.shields.io/badge/Architektur-amd64%20%7C%20aarch64%20%7C%20armv7-green" alt="Arch"/>
   <img src="https://img.shields.io/badge/Lizenz-MIT-lightgrey" alt="Lizenz"/>  
   <img src="https://img.shields.io/badge/Downloads-14.3K-blue" alt="Downloads"/>
@@ -84,6 +84,7 @@ Wenn euch die App gefällt, würde ich mich über eine Sternebewertung ⭐ freue
 | `ha_sensors` | REST-API Fallback aktivieren (nur ohne MQTT-Broker nötig) | `false` |
 | `ha_sensors_interval` | Intervall Systemsensoren (Sek.) | `60` |
 | `ha_sensors_traffic_interval` | Intervall Traffic-Sensoren (Sek.) | `300` |
+| `ha_phone_sensors` | Telefonie-Sensoren aktivieren: letzter Anruf, letzter verpasster und letzter eingehender Anruf (mit Nummer & Name) als HA-Sensoren – nur sinnvoll, wenn Telefonie über die FRITZ!Box läuft | `false` |
 | `keep_session_alive` | FRITZ!Box-Session permanent offen halten – nötig für kontinuierliche HA-Sensor-Updates auch wenn das Portal nicht aktiv geöffnet ist. **Erhöht die FRITZ!Box-Last und kann mit der HA-eigenen Fritz!SmartHome-Integration konkurrieren** – nur einschalten wenn die Sensoren wirklich rund um die Uhr aktualisiert werden müssen. **Auch Voraussetzung, um WLAN aus HA zu schalten, wenn das Portal nicht geöffnet ist.** | `false` |
 | `traffic_history_server` | Den Download-/Upload-Verlauf (letzte 30 min) serverseitig durchgehend sammeln, damit das Dashboard-Chart beim Zurückkehren sofort lückenlos gefüllt ist – unabhängig davon ob das Portal offen war. Kostet etwas mehr FRITZ!Box-Last. Ohne diese Option wird der Verlauf nur im Browser (localStorage) gespeichert. | `false` |
 | `debug_logging` | Alle API-Anfragen (TR-064, data.lua) im Protokoll ausgeben – hilfreich zur Fehlerdiagnose, ansonsten ausgeschaltet lassen | `false` |
@@ -192,6 +193,38 @@ erscheint der Status als Nur-Anzeige-Sensor `sensor.fritzportal_wlan_<N>` (kein 
 > **Voraussetzung:** Zum Schalten muss eine FRITZ!Box-Session bestehen. Wenn das Portal gerade **nicht**
 > im Browser geöffnet ist, wird der Schaltbefehl nur ausgeführt, wenn `keep_session_alive: true` gesetzt
 > ist. Außerdem braucht der FRITZ!Box-Benutzer Schreibrecht auf **„FRITZ!Box-Einstellungen"**.
+
+### Telefonie-Sensoren: letzte Anrufe in Home Assistant (ab v1.4.6)
+
+Mit der Option **„Telefonie-Sensoren"** (System-Seite bzw. `ha_phone_sensors: true`) überträgt
+FRITZ!Portal drei Sensoren an Home Assistant – via MQTT Discovery und/oder REST-API-Fallback:
+
+| Sensor | Inhalt |
+|---|---|
+| `sensor.fritzportal_last_call` | Letzter Anruf (egal ob ein-/ausgehend) |
+| `sensor.fritzportal_last_missed_call` | Letzter verpasster Anruf |
+| `sensor.fritzportal_last_incoming_call` | Letzter angenommener eingehender Anruf |
+
+Der **Sensor-Wert** ist der Name der Gegenstelle (aus dem FRITZ!Box-Telefonbuch, Fallback: Rufnummer).
+Details stehen als **Attribute** bereit: `number`, `name`, `date`, `duration`, `type`, `device`, `from`, `to`.
+Damit lässt sich z. B. eine kleine Anruf-Card bauen:
+
+```yaml
+type: markdown
+title: Telefon
+content: >
+  📞 **Letzter Anruf:** {{ states('sensor.fritzportal_last_call') }}
+  ({{ state_attr('sensor.fritzportal_last_call','number') }})
+  – {{ state_attr('sensor.fritzportal_last_call','date') }}
+
+  📵 **Verpasst:** {{ states('sensor.fritzportal_last_missed_call') }}
+  ({{ state_attr('sensor.fritzportal_last_missed_call','number') }})
+  – {{ state_attr('sensor.fritzportal_last_missed_call','date') }}
+```
+
+> Die Sensoren sind **standardmäßig deaktiviert**, da nicht jeder Telefonie über die FRITZ!Box nutzt.
+> Beim Deaktivieren werden die MQTT-Entitäten automatisch wieder aus HA entfernt. Der FRITZ!Box-Benutzer
+> braucht die Berechtigung **„Sprachnachrichten, Faxnachrichten, FRITZ!App Fon und Anrufliste"**.
 
 ---
 

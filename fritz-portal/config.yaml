@@ -1,5 +1,5 @@
 name: "FRITZ!Portal"
-version: "1.4.5"
+version: "1.4.6"
 slug: "fritz-portal"
 description: "FRITZ!Box Dashboard für Home Assistant"
 url: "https://github.com/jayjojayson/FRITZ-Portal"
@@ -32,6 +32,7 @@ options:
   ha_sensors: false
   ha_sensors_interval: 60
   ha_sensors_traffic_interval: 300
+  ha_phone_sensors: false
   debug_logging: false
   keep_session_alive: false
   traffic_history_server: false
@@ -42,6 +43,7 @@ schema:
   ha_sensors: bool
   ha_sensors_interval: int
   ha_sensors_traffic_interval: int
+  ha_phone_sensors: bool
   debug_logging: bool
   keep_session_alive: bool
   traffic_history_server: bool

@@ -13,7 +13,7 @@ export default function System({ sid }: SystemProps) {
   const [rebooting, setRebooting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [version] = useState('1.4.5');
+  const [version] = useState('1.4.6');
   const [fritzHost, setFritzHost] = useState('fritz.box');
 
   // HA-Sensor-Einstellungen
@@ -21,6 +21,7 @@ export default function System({ sid }: SystemProps) {
     ha_sensors: boolean;
     ha_sensors_interval: number;
     ha_sensors_traffic_interval: number;
+    ha_phone_sensors: boolean;
     ha_available: boolean;
     mqtt_available: boolean;
     debug_logging: boolean;
@@ -66,6 +67,7 @@ export default function System({ sid }: SystemProps) {
           ha_sensors:                  haSettings.ha_sensors,
           ha_sensors_interval:         haSettings.ha_sensors_interval,
           ha_sensors_traffic_interval: haSettings.ha_sensors_traffic_interval,
+          ha_phone_sensors:            haSettings.ha_phone_sensors,
           debug_logging:               haSettings.debug_logging,
           keep_session_alive:          haSettings.keep_session_alive,
           traffic_history_server:      haSettings.traffic_history_server,
@@ -285,6 +287,30 @@ export default function System({ sid }: SystemProps) {
                 />
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t('Sek.')}</span>
               </div>
+            </div>
+
+            {/* Telefonie-Sensoren */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderTop: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 14 }}>{t('Telefonie-Sensoren')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>{t('Letzter Anruf, letzter verpasster und letzter eingehender Anruf (mit Nummer & Name) an Home Assistant übertragen – nur sinnvoll, wenn Telefonie über die FRITZ!Box genutzt wird.')}</div>
+              </div>
+              <button
+                onClick={() => setHaSettings(s => s ? { ...s, ha_phone_sensors: !s.ha_phone_sensors } : s)}
+                style={{
+                  width: 46, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+                  background: haSettings.ha_phone_sensors ? '#22c55e' : '#6b7280',
+                  position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                }}
+                title={haSettings.ha_phone_sensors ? t('Deaktivieren') : t('Aktivieren')}
+              >
+                <span style={{
+                  position: 'absolute', top: 3,
+                  left: haSettings.ha_phone_sensors ? 23 : 3,
+                  width: 20, height: 20, borderRadius: '50%', background: 'white',
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                }} />
+              </button>
             </div>
 
             {/* Sitzung dauerhaft halten */}
