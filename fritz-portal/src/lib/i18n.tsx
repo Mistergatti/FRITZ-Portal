@@ -692,21 +692,21 @@ const IT: Record<string, string> = {
   'FritzBox Webinterface': 'Interfaccia web FRITZ!Box',
   'Öffnen Sie das originale FritzBox Webinterface für erweiterte Einstellungen.': 'Apri l\'interfaccia web originale del FRITZ!Box per le impostazioni avanzate.',
   'Öffnen': 'Apri',
-  'Kein SUPERVISOR_TOKEN – Sensor-Push nur im HA Add-on verfügbar': 'Nessun SUPERVISOR_TOKEN – invio sensori disponibile solo nell\'add-on HA',
-  'REST-API aktiv – Sensoren werden via HA REST-API an Home Assistant gesendet': 'REST API attiva – i sensori vengono inviati a Home Assistant tramite REST API',
-  'MQTT Discovery aktiv – Sensoren werden via MQTT an Home Assistant gesendet': 'MQTT Discovery attivo – i sensori vengono inviati a Home Assistant tramite MQTT',
-  'MQTT nicht erreichbar – REST-API Fallback aktivieren um Sensoren zu übertragen': 'MQTT non raggiungibile – attiva il fallback REST API per inviare i sensori',
-  'Sensoren über HA REST-API senden wenn kein MQTT-Broker verfügbar ist': 'Invia i sensori tramite REST API di HA quando nessun broker MQTT è disponibile',
+  'Kein SUPERVISOR_TOKEN – Sensor-Push nur im HA Add-on verfügbar': 'Nessun SUPERVISOR_TOKEN – l\'invio sensori è disponibile solo nell\'add-on HA',
+  'REST-API aktiv – Sensoren werden via HA REST-API an Home Assistant gesendet': 'REST API attiva – sensori inviati ad Home Assistant tramite REST API',
+  'MQTT Discovery aktiv – Sensoren werden via MQTT an Home Assistant gesendet': 'MQTT Discovery attivo – sensori inviati ad Home Assistant tramite MQTT',
+  'MQTT nicht erreichbar – REST-API Fallback aktivieren um Sensoren zu übertragen': 'MQTT non raggiungibile – abilita il fallback REST API per inviare i sensori',
+  'Sensoren über HA REST-API senden wenn kein MQTT-Broker verfügbar ist': 'Invia sensori tramite REST API di HA quando non è disponibile un broker MQTT',
   'Intervall: Systemsensoren': 'Intervallo: sensori di sistema',
   'CPU, RAM, Temperatur, Geräte online, freie IPs, Download, Upload': 'CPU, RAM, temperatura, dispositivi online, IP liberi, download, upload',
   'Intervall: Traffic-Sensoren': 'Intervallo: sensori di traffico',
   'Telefonie-Sensoren': 'Sensori di telefonia',
-  'Letzter Anruf, letzter verpasster und letzter eingehender Anruf (mit Nummer & Name) an Home Assistant übertragen – nur sinnvoll, wenn Telefonie über die FRITZ!Box genutzt wird.': 'Invia l\'ultima chiamata, l\'ultima chiamata persa e l\'ultima chiamata in arrivo (con numero e nome) a Home Assistant – utile solo se la telefonia passa dal FRITZ!Box.',
+  'Letzter Anruf, letzter verpasster und letzter eingehender Anruf (mit Nummer & Name) an Home Assistant übertragen – nur sinnvoll, wenn Telefonie über die FRITZ!Box genutzt wird.': 'Invia a Home Assistant l\'ultima chiamata, l\'ultima persa e l\'ultima in entrata (con numero e nome) – utile solo se la telefonia è gestita dal FRITZ!Box.',
   'Heute, Gestern, Aktuelle Woche, Aktueller Monat, Vormonat (Download & Upload)': 'Oggi, ieri, settimana corrente, mese corrente, mese precedente (download e upload)',
   'Alle API-Anfragen (data.lua, SOAP) im Add-on-Protokoll ausgeben – hilfreich zur Fehlerdiagnose': 'Registra tutte le richieste API (data.lua, SOAP) nel log dell\'add-on – utile per la diagnosi dei problemi',
-  'FRITZ!Portal sendet Gerätewerte automatisch via MQTT Discovery an Home Assistant. Die Entitäten erscheinen unter sensor.fritzportal_* und können direkt auf dem HA-Dashboard verwendet werden. Falls kein MQTT-Broker vorhanden ist, kann der REST-API Fallback aktiviert werden.': 'FRITZ!Portal invia automaticamente i valori dei dispositivi a Home Assistant tramite MQTT Discovery. Le entità appaiono sotto sensor.fritzportal_* e possono essere utilizzate direttamente nella dashboard di HA. Se non è presente un broker MQTT, è possibile attivare il fallback REST API.',
-  'Sitzung dauerhaft aktiv halten': 'Mantieni la sessione sempre attiva',
-  'Verbindung zur FRITZ!Box beim Add-on-Start automatisch aufbauen und permanent offen halten – nur dann werden HA-Sensoren auch dann aktualisiert, wenn das Portal nicht im Browser geöffnet ist.': 'Stabilisci e mantieni aperta automaticamente la connessione al FRITZ!Box all\'avvio dell\'add-on – necessario per aggiornare i sensori HA anche quando il portale non è aperto nel browser.',
+  'FRITZ!Portal sendet Gerätewerte automatisch via MQTT Discovery an Home Assistant. Die Entitäten erscheinen unter sensor.fritzportal_* und können direkt auf dem HA-Dashboard verwendet werden. Falls kein MQTT-Broker vorhanden ist, kann der REST-API Fallback aktiviert werden.': 'FRITZ!Portal invia automaticamente i valori dei dispositivi a Home Assistant tramite MQTT Discovery. Le entità appaiono sotto sensor.fritzportal_* e possono essere usate direttamente nella dashboard HA. Se non è presente un broker MQTT, è possibile attivare il fallback REST API.',
+  'Sitzung dauerhaft aktiv halten': 'Mantieni la sessione permanentemente attiva',
+  'Verbindung zur FRITZ!Box beim Add-on-Start automatisch aufbauen und permanent offen halten – nur dann werden HA-Sensoren auch dann aktualisiert, wenn das Portal nicht im Browser geöffnet ist.': 'Stabilisci e mantieni automaticamente la connessione con il FRITZ!Box all\'avvio dell\'add-on – necessario per aggiornare i sensori HA anche quando il portale non è aperto nel browser.',
   'Sek.': 'sec',
   'Deaktivieren': 'Disattiva',
   'Aktivieren': 'Attiva',
@@ -715,15 +715,15 @@ const IT: Record<string, string> = {
   '← Zurück zur Liste': '← Torna all\'elenco',
   'Gerätedetails für {mac}': 'Dettagli dispositivo per {mac}',
   'Gerätename': 'Nome dispositivo',
-  'Leerzeichen werden zu Bindestrichen, Umlaute werden umgeschrieben': 'Gli spazi diventano trattini, i caratteri speciali vengono riscritti',
+  'Leerzeichen werden zu Bindestrichen, Umlaute werden umgeschrieben': 'Gli spazi diventano trattini, le lettere accentate vengono convertite',
   'Gerätekontrolle': 'Controllo dispositivo',
   'Internet sperren': 'Blocca Internet',
   'Internet freigeben': 'Consenti Internet',
-  'Wird ausgeführt...': 'Elaborazione in corso...',
+  'Wird ausgeführt...': 'In esecuzione...',
   'Gerät ist gesperrt': 'Il dispositivo è bloccato',
   'IPv4-Adresse dauerhaft zuweisen': 'Assegna indirizzo IPv4 permanente',
   'Reservierung aktiv: {ip}': 'Prenotazione attiva: {ip}',
-  'Weist diesem Gerät immer die gleiche IPv4-Adresse zu (DHCP-Reservierung). Das Gerät erhält diese IP bei jeder Verbindung automatisch.': 'Assegna sempre lo stesso indirizzo IPv4 a questo dispositivo (prenotazione DHCP). Il dispositivo riceverà automaticamente questo IP ad ogni connessione.',
+  'Weist diesem Gerät immer die gleiche IPv4-Adresse zu (DHCP-Reservierung). Das Gerät erhält diese IP bei jeder Verbindung automatisch.': 'Assegna sempre lo stesso indirizzo IPv4 a questo dispositivo (prenotazione DHCP). Il dispositivo riceve automaticamente questo IP a ogni connessione.',
   'Dauerhaft zuweisen': 'Assegna in modo permanente',
   'Reservierung aktualisieren': 'Aggiorna prenotazione',
   'Reservierung entfernen': 'Rimuovi prenotazione',
@@ -741,41 +741,50 @@ const IT: Record<string, string> = {
 interface I18nContextType {
   lang: Lang;
   setLang: (lang: Lang) => void;
-  t: (key: string, vars?: Record<string, string | number>) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }
 
 const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
+const STORAGE_KEY = 'fritz_portal_lang';
+
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => {
-    const saved = localStorage.getItem('fp_lang');
-    if (saved === 'de' || saved === 'en' || saved === 'it') return saved;
-    const nav = navigator.language.toLowerCase();
-    if (nav.startsWith('it')) return 'it';
-    if (nav.startsWith('de')) return 'de';
+    const saved = localStorage.getItem(STORAGE_KEY) as Lang;
+    if (saved && ['de', 'en', 'it'].includes(saved)) {
+      return saved;
+    }
+    const navLang = navigator.language.slice(0, 2);
+    if (navLang === 'de') return 'de';
+    if (navLang === 'it') return 'it';
     return 'en';
   });
 
   const setLang = (newLang: Lang) => {
     setLangState(newLang);
-    localStorage.setItem('fp_lang', newLang);
+    localStorage.setItem(STORAGE_KEY, newLang);
   };
 
-  const t = (key: string, vars?: Record<string, string | number>): string => {
-    let str = key;
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  const t = (key: string, params?: Record<string, string | number>): string => {
+    let translation = key;
+
     if (lang === 'en' && EN[key]) {
-      str = EN[key];
+      translation = EN[key];
     } else if (lang === 'it' && IT[key]) {
-      str = IT[key];
+      translation = IT[key];
     }
 
-    if (vars) {
-      Object.entries(vars).forEach(([k, v]) => {
-        str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+    if (params) {
+      Object.entries(params).forEach(([paramKey, paramValue]) => {
+        translation = translation.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(paramValue));
       });
     }
 
-    return str;
+    return translation;
   };
 
   return (
