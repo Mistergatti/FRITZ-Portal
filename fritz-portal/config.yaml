@@ -1,4 +1,4 @@
-name: "FRITZ!Portal it"
+name: "FRITZ!Portal"
 version: "1.4.6"
 slug: "fritz-portal"
 description: "FRITZ!Box Dashboard für Home Assistant"
