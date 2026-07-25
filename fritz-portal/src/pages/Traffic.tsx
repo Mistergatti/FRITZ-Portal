@@ -51,8 +51,11 @@ export default function Traffic({ sid }: TrafficProps) {
     try {
       const r = await apiFetch('/api/fritz/traffic-raw', { headers });
       setDiagResult(await r.json());
-    } catch { setDiagResult({ error: 'Fetch fehlgeschlagen' }); }
-    finally { setDiagLoading(false); }
+    } catch { 
+      setDiagResult({ error: t('Fetch fehlgeschlagen') }); 
+    } finally { 
+      setDiagLoading(false); 
+    }
   };
 
   const fmtBytes = (bytes: number) => {
@@ -68,7 +71,7 @@ export default function Traffic({ sid }: TrafficProps) {
     <div>
       <div className="page-header">
         <h2>{t('Traffic')}</h2>
-        <p>{t('Online-Z\u00e4hler & Datenvolumen')}</p>
+        <p>{t('Online-Zähler & Datenvolumen')}</p>
       </div>
 
       {error && (
@@ -95,16 +98,16 @@ export default function Traffic({ sid }: TrafficProps) {
           color: 'var(--text-secondary)',
           fontSize: 14,
         }}>
-          <strong style={{ color: 'var(--text-primary)' }}>{t('Datenvolumen nicht verfügbar')}</strong> – Die Fritz!Box liefert keine Volumen-Statistik.
-          Bitte prüfe in der Fritz!Box-Oberfläche unter <strong>Internet &nbsp;›&nbsp; Online-Zähler</strong>,
-          ob die Zählung aktiviert ist. Online-Zeiten werden trotzdem angezeigt.
+          <strong style={{ color: 'var(--text-primary)' }}>{t('Datenvolumen nicht verfügbar')}</strong> – {t('Die Fritz!Box liefert keine Volumen-Statistik.')}&nbsp;
+          {t('Bitte prüfe in der Fritz!Box-Oberfläche unter')} <strong>{t('Internet')} &nbsp;›&nbsp; {t('Online-Zähler')}</strong>,&nbsp;
+          {t('ob die Zählung aktiviert ist. Online-Zeiten werden trotzdem angezeigt.')}
           <div style={{ marginTop: 10 }}>
             <button
               onClick={runDiag}
               disabled={diagLoading}
               style={{ padding: '4px 12px', fontSize: 12, borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}
             >
-              {diagLoading ? 'Prüfe...' : 'Diagnose: Verfügbare Endpunkte prüfen'}
+              {diagLoading ? t('Prüfe...') : t('Diagnose: Verfügbare Endpunkte prüfen')}
             </button>
           </div>
         </div>
@@ -112,7 +115,7 @@ export default function Traffic({ sid }: TrafficProps) {
 
       {diagResult && (
         <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 24, fontSize: 12 }}>
-          <strong style={{ display: 'block', marginBottom: 8 }}>Diagnose-Ergebnis (welche Methode liefert Daten?)</strong>
+          <strong style={{ display: 'block', marginBottom: 8 }}>{t('Diagnose-Ergebnis (welche Methode liefert Daten?)')}</strong>
           {Object.entries(diagResult).map(([k, v]) => {
             const str = typeof v === 'string' ? v : JSON.stringify(v);
             return (
@@ -175,7 +178,7 @@ export default function Traffic({ sid }: TrafficProps) {
 
           <div className="card">
             <div className="card-header">
-              <h3>{t('Online-Z\u00e4hler')}</h3>
+              <h3>{t('Online-Zähler')}</h3>
               <button
                 onClick={load}
                 style={{
@@ -224,7 +227,7 @@ export default function Traffic({ sid }: TrafficProps) {
       ) : (
         <div className="card">
           <div className="card-body" style={{ padding: 32, textAlign: 'center', color: 'var(--text-secondary)' }}>
-            Keine Zählerdaten verf{'\u00fc'}gbar. Bitte Konsole / Log auf <code>traffic-counters raw</code> prüfen.
+            {t('Keine Zählerdaten verfügbar. Bitte Konsole / Log auf traffic-counters raw prüfen.')}
           </div>
         </div>
       )}
