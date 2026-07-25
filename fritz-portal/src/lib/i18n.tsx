@@ -801,3 +801,5 @@ export function useI18n() {
   }
   return context;
 }
+// Alias per compatibilità con i componenti esistenti:
+export const useT = useI18n;
