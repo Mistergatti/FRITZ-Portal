@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 
 export type Lang = 'de' | 'en' | 'it';
 
-// Wörterbuch Deutsch -> Englisch.
+// Wörterbuch Deutsch -> Englisch
 const EN: Record<string, string> = {
   // ── App / Login ─────────────────────────────────────────────
   'Wird initialisiert...': 'Initializing...',
@@ -692,30 +692,30 @@ const IT: Record<string, string> = {
   'FritzBox Webinterface': 'Interfaccia web FRITZ!Box',
   'Öffnen Sie das originale FritzBox Webinterface für erweiterte Einstellungen.': 'Apri l\'interfaccia web originale del FRITZ!Box per le impostazioni avanzate.',
   'Öffnen': 'Apri',
-  'Kein SUPERVISOR_TOKEN – Sensor-Push nur im HA Add-on verfügbar': 'Nessun SUPERVISOR_TOKEN – l\'invio sensori è disponibile solo nell\'add-on HA',
-  'REST-API aktiv – Sensoren werden via HA REST-API an Home Assistant gesendet': 'REST API attiva – sensori inviati ad Home Assistant tramite REST API',
-  'MQTT Discovery aktiv – Sensoren werden via MQTT an Home Assistant gesendet': 'MQTT Discovery attivo – sensori inviati ad Home Assistant tramite MQTT',
-  'MQTT nicht erreichbar – REST-API Fallback aktivieren um Sensoren zu übertragen': 'MQTT non raggiungibile – abilita il fallback REST API per inviare i sensori',
-  'Sensoren über HA REST-API senden wenn kein MQTT-Broker verfügbar ist': 'Invia sensori tramite REST API di HA quando non è disponibile un broker MQTT',
+  'Kein SUPERVISOR_TOKEN – Sensor-Push nur im HA Add-on verfügbar': 'Nessun SUPERVISOR_TOKEN – invio sensori disponibile solo nell\'add-on HA',
+  'REST-API aktiv – Sensoren werden via HA REST-API an Home Assistant gesendet': 'REST API attiva – i sensori vengono inviati a Home Assistant tramite REST API',
+  'MQTT Discovery aktiv – Sensoren werden via MQTT an Home Assistant gesendet': 'MQTT Discovery attivo – i sensori vengono inviati a Home Assistant tramite MQTT',
+  'MQTT nicht erreichbar – REST-API Fallback aktivieren um Sensoren zu übertragen': 'MQTT non raggiungibile – attiva il fallback REST API per inviare i sensori',
+  'Sensoren über HA REST-API senden wenn kein MQTT-Broker verfügbar ist': 'Invia i sensori tramite REST API di HA quando non è disponibile un broker MQTT',
   'Intervall: Systemsensoren': 'Intervallo: sensori di sistema',
   'CPU, RAM, Temperatur, Geräte online, freie IPs, Download, Upload': 'CPU, RAM, temperatura, dispositivi online, IP liberi, download, upload',
   'Intervall: Traffic-Sensoren': 'Intervallo: sensori di traffico',
   'Telefonie-Sensoren': 'Sensori di telefonia',
-  'Letzter Anruf, letzter verpasster und letzter eingehender Anruf (mit Nummer & Name) an Home Assistant übertragen – nur sinnvoll, wenn Telefonie über die FRITZ!Box genutzt wird.': 'Invia a Home Assistant l\'ultima chiamata, l\'ultima persa e l\'ultima in entrata (con numero e nome) – utile solo se la telefonia è gestita dal FRITZ!Box.',
+  'Letzter Anruf, letzter verpasster und letzter eingehender Anruf (mit Nummer & Name) an Home Assistant übertragen – nur sinnvoll, wenn Telefonie über die FRITZ!Box genutzt wird.': 'Invia ultima chiamata, ultima chiamata persa e ultima chiamata in arrivo (con numero e nome) a Home Assistant – utile solo se la telefonia passa dal FRITZ!Box.',
   'Heute, Gestern, Aktuelle Woche, Aktueller Monat, Vormonat (Download & Upload)': 'Oggi, ieri, settimana corrente, mese corrente, mese precedente (download e upload)',
-  'Alle API-Anfragen (data.lua, SOAP) im Add-on-Protokoll ausgeben – hilfreich zur Fehlerdiagnose': 'Registra tutte le richieste API (data.lua, SOAP) nel log dell\'add-on – utile per la diagnosi dei problemi',
+  'Alle API-Anfragen (data.lua, SOAP) im Add-on-Protokoll ausgeben – hilfreich zur Fehlerdiagnose': 'Registra tutte le richieste API (data.lua, SOAP) nel registro dell\'add-on – utile per la diagnosi degli errori',
   'FRITZ!Portal sendet Gerätewerte automatisch via MQTT Discovery an Home Assistant. Die Entitäten erscheinen unter sensor.fritzportal_* und können direkt auf dem HA-Dashboard verwendet werden. Falls kein MQTT-Broker vorhanden ist, kann der REST-API Fallback aktiviert werden.': 'FRITZ!Portal invia automaticamente i valori dei dispositivi a Home Assistant tramite MQTT Discovery. Le entità appaiono sotto sensor.fritzportal_* e possono essere usate direttamente nella dashboard HA. Se non è presente un broker MQTT, è possibile attivare il fallback REST API.',
   'Sitzung dauerhaft aktiv halten': 'Mantieni la sessione permanentemente attiva',
-  'Verbindung zur FRITZ!Box beim Add-on-Start automatisch aufbauen und permanent offen halten – nur dann werden HA-Sensoren auch dann aktualisiert, wenn das Portal nicht im Browser geöffnet ist.': 'Stabilisci e mantieni automaticamente la connessione con il FRITZ!Box all\'avvio dell\'add-on – necessario per aggiornare i sensori HA anche quando il portale non è aperto nel browser.',
+  'Verbindung zur FRITZ!Box beim Add-on-Start automatisch aufbauen und permanent offen halten – nur dann werden HA-Sensoren auch dann aktualisiert, wenn das Portal nicht im Browser geöffnet ist.': 'Stabilisci e mantieni automaticamente la connessione con il FRITZ!Box all\'avvio dell\'add-on – necessario affinché i sensori HA si aggiornino anche quando il portale non è aperto nel browser.',
   'Sek.': 'sec',
   'Deaktivieren': 'Disattiva',
   'Aktivieren': 'Attiva',
   'Neustart fehlgeschlagen': 'Riavvio fallito',
   'Gerät nicht gefunden': 'Dispositivo non trovato',
-  '← Zurück zur Liste': '← Torna all\'elenco',
+  '← Zurück zur Liste': '← Torna alla lista',
   'Gerätedetails für {mac}': 'Dettagli dispositivo per {mac}',
   'Gerätename': 'Nome dispositivo',
-  'Leerzeichen werden zu Bindestrichen, Umlaute werden umgeschrieben': 'Gli spazi diventano trattini, le lettere accentate vengono convertite',
+  'Leerzeichen werden zu Bindestrichen, Umlaute werden umgeschrieben': 'Gli spazi diventano trattini, i caratteri speciali vengono riscritti',
   'Gerätekontrolle': 'Controllo dispositivo',
   'Internet sperren': 'Blocca Internet',
   'Internet freigeben': 'Consenti Internet',
@@ -738,74 +738,61 @@ const IT: Record<string, string> = {
   'Anmelden...': 'Accesso in corso...',
 };
 
-interface I18nContextType {
+interface LanguageContextType {
   lang: Lang;
   setLang: (lang: Lang) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
-const I18nContext = createContext<I18nContextType | undefined>(undefined);
+const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'fritz_portal_lang';
+const LOCAL_STORAGE_KEY = 'fritz_portal_lang';
 
-export function I18nProvider({ children }: { children: ReactNode }) {
+export const LanguageProvider = ({ children }: { children: ReactNode }) => {
   const [lang, setLangState] = useState<Lang>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) as Lang;
+    const saved = localStorage.getItem(LOCAL_STORAGE_KEY) as Lang;
     if (saved && ['de', 'en', 'it'].includes(saved)) {
       return saved;
     }
     const navLang = navigator.language.slice(0, 2);
-    if (navLang === 'de') return 'de';
     if (navLang === 'it') return 'it';
-    return 'en';
+    if (navLang === 'en') return 'en';
+    return 'de';
   });
 
   const setLang = (newLang: Lang) => {
     setLangState(newLang);
-    localStorage.setItem(STORAGE_KEY, newLang);
+    localStorage.getItem(LOCAL_STORAGE_KEY) !== newLang &&
+      localStorage.setItem(LOCAL_STORAGE_KEY, newLang);
   };
 
-  useEffect(() => {
-    document.documentElement.lang = lang;
-  }, [lang]);
-
   const t = (key: string, params?: Record<string, string | number>): string => {
-    let translation = key;
+    let dict: Record<string, string> = {};
+    if (lang === 'en') dict = EN;
+    if (lang === 'it') dict = IT;
 
-    if (lang === 'en' && EN[key]) {
-      translation = EN[key];
-    } else if (lang === 'it' && IT[key]) {
-      translation = IT[key];
-    }
+    let text = dict[key] || key;
 
     if (params) {
-      Object.entries(params).forEach(([paramKey, paramValue]) => {
-        translation = translation.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(paramValue));
+      Object.entries(params).forEach(([paramKey, value]) => {
+        text = text.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(value));
       });
     }
 
-    return translation;
+    return text;
   };
 
   return (
-    <I18nContext.Provider value={{ lang, setLang, t }}>
+    <LanguageContext.Provider value={{ lang, setLang, t }}>
       {children}
-    </I18nContext.Provider>
+    </LanguageContext.Provider>
   );
-}
+};
 
-export function useI18n() {
-  const context = useContext(I18nContext);
+export const useLanguage = (): LanguageContextType => {
+  const context = useContext(LanguageContext);
   if (!context) {
-    throw new Error('useI18n must be used within an I18nProvider');
+    throw new Error('useLanguage must be used within a LanguageProvider');
   }
   return context;
-}
-// Alias per compatibilità con i componenti esistenti:
-export function useT() {
-  const context = useContext(I18nContext);
-  if (!context) {
-    throw new Error('useT must be used within an I18nProvider');
-  }
-  return context.t; // <-- Restituisce direttamente la funzione t!
-}
+};
