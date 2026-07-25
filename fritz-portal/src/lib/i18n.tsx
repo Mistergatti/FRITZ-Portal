@@ -144,7 +144,7 @@ const EN: Record<string, string> = {
   'Netzwerk-Konfiguration und Einstellungen': 'Network configuration and settings',
   'LAN': 'LAN',
   'WAN': 'WAN',
-  'WLAN': 'WLAN',
+  'WLAN': 'Wi-Fi',
   'DHCP': 'DHCP',
   'Router IP': 'Router IP',
   'Subnetzmaske': 'Subnet mask',
@@ -336,6 +336,9 @@ const EN: Record<string, string> = {
   'Letzter Anruf, letzter verpasster und letzter eingehender Anruf (mit Nummer & Name) an Home Assistant übertragen – nur sinnvoll, wenn Telefonie über die FRITZ!Box genutzt wird.': 'Send last call, last missed call and last incoming call (with number & name) to Home Assistant – only useful if telephony runs through the FRITZ!Box.',
   'Heute, Gestern, Aktuelle Woche, Aktueller Monat, Vormonat (Download & Upload)': 'Today, yesterday, current week, current month, previous month (download & upload)',
   'Alle API-Anfragen (data.lua, SOAP) im Add-on-Protokoll ausgeben – hilfreich zur Fehlerdiagnose': 'Log all API requests (data.lua, SOAP) in the add-on log – helpful for diagnostics',
+  'FRITZ!Portal sendet Gerätewerte automatisch via MQTT Discovery an Home Assistant. Die Entitäten erscheinen unter sensor.fritzportal_* und können direkt auf dem HA-Dashboard verwendet werden. Falls kein MQTT-Broker vorhanden ist, kann der REST-API Fallback aktiviert werden.': 'FRITZ!Portal automatically sends device values to Home Assistant via MQTT Discovery. Entities appear under sensor.fritzportal_* and can be used directly on the HA dashboard. If no MQTT broker is present, the REST API fallback can be enabled.',
+  'Sitzung dauerhaft aktiv halten': 'Keep session permanently active',
+  'Verbindung zur FRITZ!Box beim Add-on-Start automatisch aufbauen und permanent offen halten – nur dann werden HA-Sensoren auch dann aktualisiert, wenn das Portal nicht im Browser geöffnet ist.': 'Automatically establish and hold connection to FRITZ!Box on add-on start – required for HA sensors to update when the portal is not open in a browser.',
   'Sek.': 's',
   'Deaktivieren': 'Disable',
   'Aktivieren': 'Enable',
@@ -698,30 +701,33 @@ const IT: Record<string, string> = {
   'CPU, RAM, Temperatur, Geräte online, freie IPs, Download, Upload': 'CPU, RAM, temperatura, dispositivi online, IP liberi, download, upload',
   'Intervall: Traffic-Sensoren': 'Intervallo: sensori di traffico',
   'Telefonie-Sensoren': 'Sensori di telefonia',
-  'Letzter Anruf, letzter verpasster und letzter eingehender Anruf (mit Nummer & Name) an Home Assistant übertragen – nur sinnvoll, wenn Telefonie über die FRITZ!Box genutzt wird.': 'Invia l\'ultima chiamata, l\'ultima persa e l\'ultima in entrata (con numero e nome) ad Home Assistant – utile solo se la telefonia passa tramite il FRITZ!Box.',
-  'Heute, Gestern, Aktuelle Woche, Aktueller Monat, Vormonat (Download & Upload)': 'Oggi, ieri, settimana corrente, mese corrente, mese precedente (download & upload)',
-  'Alle API-Anfragen (data.lua, SOAP) im Add-on-Protokoll ausgeben – hilfreich zur Fehlerdiagnose': 'Mostra tutte le richieste API (data.lua, SOAP) nel registro dell\'add-on – utile per la diagnosi degli errori',
-  'Sek.': 'sec.',
+  'Letzter Anruf, letzter verpasster und letzter eingehender Anruf (mit Nummer & Name) an Home Assistant übertragen – nur sinnvoll, wenn Telefonie über die FRITZ!Box genutzt wird.': 'Invia l\'ultima chiamata, l\'ultima chiamata persa e l\'ultima chiamata in arrivo (con numero e nome) a Home Assistant – utile solo se la telefonia passa dal FRITZ!Box.',
+  'Heute, Gestern, Aktuelle Woche, Aktueller Monat, Vormonat (Download & Upload)': 'Oggi, ieri, settimana corrente, mese corrente, mese precedente (download e upload)',
+  'Alle API-Anfragen (data.lua, SOAP) im Add-on-Protokoll ausgeben – hilfreich zur Fehlerdiagnose': 'Registra tutte le richieste API (data.lua, SOAP) nel log dell\'add-on – utile per la diagnosi dei problemi',
+  'FRITZ!Portal sendet Gerätewerte automatisch via MQTT Discovery an Home Assistant. Die Entitäten erscheinen unter sensor.fritzportal_* und können direkt auf dem HA-Dashboard verwendet werden. Falls kein MQTT-Broker vorhanden ist, kann der REST-API Fallback aktiviert werden.': 'FRITZ!Portal invia automaticamente i valori dei dispositivi a Home Assistant tramite MQTT Discovery. Le entità appaiono sotto sensor.fritzportal_* e possono essere utilizzate direttamente nella dashboard di HA. Se non è presente un broker MQTT, è possibile attivare il fallback REST API.',
+  'Sitzung dauerhaft aktiv halten': 'Mantieni la sessione sempre attiva',
+  'Verbindung zur FRITZ!Box beim Add-on-Start automatisch aufbauen und permanent offen halten – nur dann werden HA-Sensoren auch dann aktualisiert, wenn das Portal nicht im Browser geöffnet ist.': 'Stabilisci e mantieni aperta automaticamente la connessione al FRITZ!Box all\'avvio dell\'add-on – necessario per aggiornare i sensori HA anche quando il portale non è aperto nel browser.',
+  'Sek.': 'sec',
   'Deaktivieren': 'Disattiva',
   'Aktivieren': 'Attiva',
   'Neustart fehlgeschlagen': 'Riavvio fallito',
   'Gerät nicht gefunden': 'Dispositivo non trovato',
-  '← Zurück zur Liste': '← Torna alla lista',
+  '← Zurück zur Liste': '← Torna all\'elenco',
   'Gerätedetails für {mac}': 'Dettagli dispositivo per {mac}',
   'Gerätename': 'Nome dispositivo',
   'Leerzeichen werden zu Bindestrichen, Umlaute werden umgeschrieben': 'Gli spazi diventano trattini, i caratteri speciali vengono riscritti',
   'Gerätekontrolle': 'Controllo dispositivo',
   'Internet sperren': 'Blocca Internet',
   'Internet freigeben': 'Consenti Internet',
-  'Wird ausgeführt...': 'In esecuzione...',
+  'Wird ausgeführt...': 'Elaborazione in corso...',
   'Gerät ist gesperrt': 'Il dispositivo è bloccato',
   'IPv4-Adresse dauerhaft zuweisen': 'Assegna indirizzo IPv4 permanente',
   'Reservierung aktiv: {ip}': 'Prenotazione attiva: {ip}',
   'Weist diesem Gerät immer die gleiche IPv4-Adresse zu (DHCP-Reservierung). Das Gerät erhält diese IP bei jeder Verbindung automatisch.': 'Assegna sempre lo stesso indirizzo IPv4 a questo dispositivo (prenotazione DHCP). Il dispositivo riceverà automaticamente questo IP ad ogni connessione.',
-  'Dauerhaft zuweisen': 'Assegna permanentemente',
+  'Dauerhaft zuweisen': 'Assegna in modo permanente',
   'Reservierung aktualisieren': 'Aggiorna prenotazione',
   'Reservierung entfernen': 'Rimuovi prenotazione',
-  'fest zugewiesen': 'assegnato fisso',
+  'fest zugewiesen': 'statico',
   'Interface': 'Interfaccia',
 
   // ── Login ───────────────────────────────────────────────────
@@ -732,29 +738,57 @@ const IT: Record<string, string> = {
   'Anmelden...': 'Accesso in corso...',
 };
 
-const DICTS: Record<Lang, Record<string, string>> = { de: {}, en: EN, it: IT };
-
-interface I18nContextValue {
+interface I18nContextType {
   lang: Lang;
-  setLang: (l: Lang) => void;
-  t: (s: string) => string;
+  setLang: (lang: Lang) => void;
+  t: (key: string, vars?: Record<string, string | number>) => string;
 }
 
-const I18nContext = createContext<I18nContextValue>({ lang: 'de', setLang: () => {}, t: s => s });
+const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => {
-    const saved = localStorage.getItem('lang');
-    return (saved === 'en' || saved === 'de' || saved === 'it') ? saved : 'de';
+    const saved = localStorage.getItem('fp_lang');
+    if (saved === 'de' || saved === 'en' || saved === 'it') return saved;
+    const nav = navigator.language.toLowerCase();
+    if (nav.startsWith('it')) return 'it';
+    if (nav.startsWith('de')) return 'de';
+    return 'en';
   });
-  useEffect(() => { document.documentElement.setAttribute('lang', lang); }, [lang]);
-  const setLang = (l: Lang) => { setLangState(l); localStorage.setItem('lang', l); };
-  const dict = DICTS[lang];
-  const t = (s: string) => dict[s] ?? s;
-  return <I18nContext.Provider value={{ lang, setLang, t }}>{children}</I18nContext.Provider>;
+
+  const setLang = (newLang: Lang) => {
+    setLangState(newLang);
+    localStorage.setItem('fp_lang', newLang);
+  };
+
+  const t = (key: string, vars?: Record<string, string | number>): string => {
+    let str = key;
+    if (lang === 'en' && EN[key]) {
+      str = EN[key];
+    } else if (lang === 'it' && IT[key]) {
+      str = IT[key];
+    }
+
+    if (vars) {
+      Object.entries(vars).forEach(([k, v]) => {
+        str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+      });
+    }
+
+    return str;
+  };
+
+  return (
+    <I18nContext.Provider value={{ lang, setLang, t }}>
+      {children}
+    </I18nContext.Provider>
+  );
 }
 
-export function useI18n() { return useContext(I18nContext); }
-
-// Bequemlichkeits-Hook: nur die t-Funktion zurückgeben
-export function useT() { return useContext(I18nContext).t; }
+export function useI18n() {
+  const context = useContext(I18nContext);
+  if (!context) {
+    throw new Error('useI18n must be used within an I18nProvider');
+  }
+  return context;
+}
