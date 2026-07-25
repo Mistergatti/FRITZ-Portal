@@ -802,4 +802,10 @@ export function useI18n() {
   return context;
 }
 // Alias per compatibilità con i componenti esistenti:
-export const useT = useI18n;
+export function useT() {
+  const context = useContext(I18nContext);
+  if (!context) {
+    throw new Error('useT must be used within an I18nProvider');
+  }
+  return context.t; // <-- Restituisce direttamente la funzione t!
+}
