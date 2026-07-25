@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode } from 'react';
 
 export type Lang = 'de' | 'en' | 'it';
 
@@ -687,7 +687,7 @@ const IT: Record<string, string> = {
   'Startet neu...': 'Riavvio in corso...',
   'Jetzt neustarten': 'Riavvia ora',
   'Firmware Update': 'Aggiornamento firmware',
-  'Prüfen Sie auf verfügbare Firmware-Updates für Ihre FritzBox.': 'Verifica la presenza di aggiornamenti firmware disponibili per il tuo FRITZ!Box.',
+  'Prüfen Sie auf verfügbare Firmware-Updates für Ihre FRITZ!Box.': 'Verifica la presenza di aggiornamenti firmware disponibili per il tuo FRITZ!Box.',
   'In FritzBox öffnen': 'Apri in FRITZ!Box',
   'FritzBox Webinterface': 'Interfaccia web FRITZ!Box',
   'Öffnen Sie das originale FritzBox Webinterface für erweiterte Einstellungen.': 'Apri l\'interfaccia web originale del FRITZ!Box per le impostazioni avanzate.',
@@ -762,8 +762,9 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
 
   const setLang = (newLang: Lang) => {
     setLangState(newLang);
-    localStorage.getItem(LOCAL_STORAGE_KEY) !== newLang &&
+    if (localStorage.getItem(LOCAL_STORAGE_KEY) !== newLang) {
       localStorage.setItem(LOCAL_STORAGE_KEY, newLang);
+    }
   };
 
   const t = (key: string, params?: Record<string, string | number>): string => {
@@ -795,4 +796,18 @@ export const useLanguage = (): LanguageContextType => {
     throw new Error('useLanguage must be used within a LanguageProvider');
   }
   return context;
+};
+
+// ── Alias e Helper per compatibilità con i vari file di componenti ──────────
+
+// Alias per compatibilità con src/main.tsx
+export { LanguageProvider as I18nProvider };
+
+// Hook alias per compatibilità con Header.tsx, Login.tsx, StatusLine.tsx
+export { useLanguage as useI18n };
+
+// Hook alias 'useT' per compatibilità con Dashboard, DeviceList, Network, ecc.
+export const useT = () => {
+  const { t } = useLanguage();
+  return t;
 };
